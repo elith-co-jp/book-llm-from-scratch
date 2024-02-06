@@ -48,10 +48,10 @@ class DecoderBlock(nn.Module):
         )
         self.layer_norm3 = LayerNorm(d_model)
 
-    def forward(self, x: Tensor, encoder_output: Tensor, mask: Tensor|None = None) -> Tensor:
+    def forward(self, x: Tensor, encoder_output: Tensor, mask: Tensor|None = None, src_tgt_mask: Tensor|None = None) -> Tensor:
         x_attention = self.attention(x, x, x, mask=mask)
         x = self.layer_norm1(x + x_attention)
-        x_attention_souce_target = self.attention_souce_target(x, encoder_output, encoder_output)
+        x_attention_souce_target = self.attention_souce_target(x, encoder_output, encoder_output, mask=src_tgt_mask)
         x = self.layer_norm2(x + x_attention_souce_target)
         x_ff = self.feed_forward(x)
         x = self.layer_norm3(x + x_ff)
