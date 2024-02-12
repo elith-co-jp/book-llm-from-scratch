@@ -1,6 +1,8 @@
+import math
+
 import torch
-from torch import nn
-from torch import Tensor
+from torch import Tensor, nn
+
 
 def layer_norm(x: Tensor, eps=1e-6):
     """Layer normalization.
@@ -10,7 +12,10 @@ def layer_norm(x: Tensor, eps=1e-6):
     Returns:
         Tensor: Output tensor.
     """
-    return (x - x.mean(-1, keepdim=True)) / x.std(-1, keepdim=True, unbiased=False).add(eps)
+    return (x - x.mean(-1, keepdim=True)) / x.std(-1, keepdim=True, unbiased=False).add(
+        eps
+    )
+
 
 class LayerNorm(nn.Module):
     def __init__(self, d_model: int, eps=1e-6):
@@ -29,6 +34,7 @@ class LayerNorm(nn.Module):
         std = x.std(-1, keepdim=True, unbiased=False)
         return self.gamma * (x - mean) / (std + self.eps) + self.beta
 
+
 def sinusoidal_position_encoding(d_model: int, sequence_length: int) -> Tensor:
     pe = torch.zeros(sequence_length, d_model)
     dim_even = torch.arange(0, d_model, 2)
@@ -37,7 +43,21 @@ def sinusoidal_position_encoding(d_model: int, sequence_length: int) -> Tensor:
     pos = torch.arange(0, sequence_length).unsqueeze(1)
 
     pe[:, dim_even] = torch.sin(pos / (10000 ** (dim_even / d_model)))
-    pe[:, dim_odd] = torch.cos(pos / (10000 ** ((dim_odd-1) / d_model)))
+    pe[:, dim_odd] = torch.cos(pos / (10000 ** ((dim_odd - 1) / d_model)))
 
     # unsqueeze(0) でミニバッチの次元を先頭に追加
     return pe.unsqueeze(0)
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model: int, max_sequence_length: int):
+        super().__init__()
+        pe = sinusoidal_position_encoding(d_model, max_sequence_length)
+        # 値を最適化しないので register_buffer で登録
+        self.scale = math.sqrt(d_model)
+        self.register_buffer("pe", pe)
+
+    def forward(self, x: Tensor) -> Tensor:
+        sequence_length = x.size(1)
+        x = x * self.scale + self.pe[:, :sequence_length]
+        return x
