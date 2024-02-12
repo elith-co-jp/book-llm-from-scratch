@@ -1,6 +1,5 @@
 import torch
-from torch import nn
-from torch import Tensor
+from torch import Tensor, nn
 
 
 class DotProductAttention(nn.Module):
@@ -26,11 +25,14 @@ class DotProductAttention(nn.Module):
 
         return output
 
+
 class ScaledDotProductAttention(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, query: Tensor, key: Tensor, value: Tensor, mask: Tensor| None = None) -> Tensor:
+    def forward(
+        self, query: Tensor, key: Tensor, value: Tensor, mask: Tensor | None = None
+    ) -> Tensor:
         """スケール内積注意の計算を行う.
 
         Args:
@@ -41,21 +43,21 @@ class ScaledDotProductAttention(nn.Module):
         """
         d_k = query.size(-1)
         # query の次元 (= キーの次元) でスケーリング
-        score = torch.bmm(query, key.transpose(1, 2)) / (d_k ** 0.5)
+        # score.shape == (batch_size, query_len, key_len)
+        score = torch.bmm(query, key.transpose(1, 2)) / (d_k**0.5)
 
         # マスクがある場合は, -infを代入してsoftmaxの値が0になるようにする
         if mask is not None:
             score = score.masked_fill(mask, float("-inf"))
 
-
         weight = torch.softmax(score, dim=-1)
         output = torch.bmm(weight, value)
 
         return output
-        
+
 
 class AttentionHead(nn.Module):
-    def __init__(self, d_k: int, d_v: int, d_model: int): 
+    def __init__(self, d_k: int, d_v: int, d_model: int):
         """MultiHeadAttentionのヘッド.
 
         Args:
@@ -71,7 +73,9 @@ class AttentionHead(nn.Module):
 
         self.attention = ScaledDotProductAttention()
 
-    def forward(self, query: Tensor, key: Tensor, value: Tensor, mask: Tensor| None = None) -> Tensor:
+    def forward(
+        self, query: Tensor, key: Tensor, value: Tensor, mask: Tensor | None = None
+    ) -> Tensor:
         """単一ヘッドのアテンションを計算する.
 
         Args:
@@ -89,8 +93,9 @@ class AttentionHead(nn.Module):
         output = self.attention(query, key, value, mask=mask)
         return output
 
+
 class MultiHeadAttention(nn.Module):
-    def __init__(self, n_heads: int, d_k: int, d_v: int, d_model: int): 
+    def __init__(self, n_heads: int, d_k: int, d_v: int, d_model: int):
         """マルチヘッドアテンション.
 
         Args:
@@ -100,11 +105,15 @@ class MultiHeadAttention(nn.Module):
             d_model (int): モデルの埋め込み次元数
         """
         super().__init__()
-        self.heads = nn.ModuleList([AttentionHead(d_k, d_v, d_model) for _ in range(n_heads)])
+        self.heads = nn.ModuleList(
+            [AttentionHead(d_k, d_v, d_model) for _ in range(n_heads)]
+        )
         # 出力を変換する全結合層
         self.linear_o = nn.Linear(n_heads * d_v, d_model)
 
-    def forward(self, query: Tensor, key: Tensor, value: Tensor, mask: Tensor|None = None) -> Tensor:
+    def forward(
+        self, query: Tensor, key: Tensor, value: Tensor, mask: Tensor | None = None
+    ) -> Tensor:
         """マルチヘッドアテンションを計算する.
 
         Args:
@@ -122,6 +131,7 @@ class MultiHeadAttention(nn.Module):
         # 出力を変換
         output = self.linear_o(head_out)
         return output
+
 
 if __name__ == "__main__":
     dim = 16
