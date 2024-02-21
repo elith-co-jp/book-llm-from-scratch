@@ -4,9 +4,19 @@ version = "0.1.0"
 description = ""
 authors = ["aRySt0cat <ryuta.academic@gmail.com>"]
 readme = "README.md"
+packages = [
+    { include = "llm_from_scratch", from = "." },
+]
 
 [tool.poetry.dependencies]
 python = "^3.11"
+notebook = "^7.0.6"
+torch = "^2.1.1"
+numpy = "^1.26.2"
+matplotlib = "^3.8.2"
+japanize-matplotlib = "^1.1.3"
+torchtext = "^0.17.0"
+tqdm = "^4.66.2"
 
 
 [build-system]
