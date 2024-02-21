@@ -1,3 +1,4 @@
+import torch
 from torch import Tensor, nn
 
 from llm_from_scratch.transformer.attention import MultiHeadAttention
@@ -161,6 +162,14 @@ class Transformer(nn.Module):
         output = self.linear(decoder_output)
         return output
 
-    def inference(self):
-        # Auto-Regressive に推論する
-        pass
+    def inference(self, src: Tensor, bos_token: int) -> Tensor:
+        tgt_tokens = torch.tensor([[bos_token]]).to(src.device)
+
+        for _ in range(20):
+            pred = self.forward(src, tgt_tokens)
+            pred = torch.tensor([[pred[0, -1].argmax().item()]]).to(src.device)
+            tgt_tokens = torch.cat((tgt_tokens, pred), axis=-1)
+            if pred[0, 0].item() == 3:
+                break
+
+        return tgt_tokens
