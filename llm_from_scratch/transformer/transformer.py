@@ -165,8 +165,10 @@ class Transformer(nn.Module):
     def inference(self, src: Tensor, bos_token: int) -> Tensor:
         tgt_tokens = torch.tensor([[bos_token]]).to(src.device)
 
+        encoder_output = self.encoder(src)
         for _ in range(20):
-            pred = self.forward(src, tgt_tokens)
+            decoder_output = self.decoder(tgt_tokens, encoder_output)
+            pred = self.linear(decoder_output)
             pred = torch.tensor([[pred[0, -1].argmax().item()]]).to(src.device)
             tgt_tokens = torch.cat((tgt_tokens, pred), axis=-1)
             if pred[0, 0].item() == 3:
