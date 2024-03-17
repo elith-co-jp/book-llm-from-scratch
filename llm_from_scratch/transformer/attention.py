@@ -134,17 +134,19 @@ class MultiHeadAttention(nn.Module):
 
 
 if __name__ == "__main__":
-    dim = 16
+    d_model = 16
     n_heads = 4
+    d_k = d_model // n_heads
+    d_v = d_k
     batch_size = 2
     query_len, key_len, value_len = 3, 4, 4
     attention = ScaledDotProductAttention()
-    multihead_attention = MultiHeadAttention(n_heads, dim, dim, dim)
+    multihead_attention = MultiHeadAttention(n_heads, d_k, d_v, d_model)
 
     # 1. query と key から, (batch_size, query_len, key_len)のスコアを計算
-    query = torch.randn(batch_size, query_len, dim)
-    key = torch.randn(batch_size, key_len, dim)
-    value = torch.randn(batch_size, value_len, dim)
+    query = torch.randn(batch_size, query_len, d_model)
+    key = torch.randn(batch_size, key_len, d_model)
+    value = torch.randn(batch_size, value_len, d_model)
 
     output = attention(query, key, value)
     output2 = multihead_attention(query, key, value)
