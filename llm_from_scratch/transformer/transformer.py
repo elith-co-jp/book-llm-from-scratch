@@ -162,6 +162,7 @@ class Transformer(nn.Module):
         output = self.linear(decoder_output)
         return output
 
+    @torch.inference_mode
     def inference(self, src: Tensor, bos_token: int) -> Tensor:
         tgt_tokens = torch.tensor([[bos_token]]).to(src.device)
 
