@@ -17,8 +17,8 @@ class EncoderBlock(nn.Module):
         )
         self.layer_norm2 = LayerNorm(d_model)
 
-    def forward(self, x: Tensor, mask: Tensor) -> Tensor:
-        x_attention = self.attention(x, x, x, mask=mask)
+    def forward(self, x: Tensor, src_padding_mask: Tensor | None = None) -> Tensor:
+        x_attention = self.attention(x, x, x, mask=src_padding_mask)
         x = self.layer_norm1(x + x_attention)
         x_ff = self.feed_forward(x)
         x = self.layer_norm2(x + x_ff)
@@ -44,7 +44,7 @@ class Encoder(nn.Module):
             [EncoderBlock(d_model, n_heads, d_k, d_v, d_ff) for _ in range(n_blocks)]
         )
 
-    def forward(self, x: Tensor, mask: Tensor | None = None) -> Tensor:
+    def forward(self, x: Tensor, src_padding_mask: Tensor | None = None) -> Tensor:
         """Forward.
 
         Args:
@@ -56,7 +56,7 @@ class Encoder(nn.Module):
         x = self.embedding(x)
         x = self.pe(x)
         for block in self.blocks:
-            x = block(x, mask=mask)
+            x = block(x, src_padding_mask=src_padding_mask)
         return x
 
 
@@ -78,13 +78,13 @@ class DecoderBlock(nn.Module):
         self,
         x: Tensor,
         encoder_output: Tensor,
-        mask: Tensor | None = None,
-        src_tgt_mask: Tensor | None = None,
+        tgt_mask: Tensor | None = None,
+        src_tgt_padding_mask: Tensor | None = None,
     ) -> Tensor:
-        x_attention = self.attention(x, x, x, mask=mask)
+        x_attention = self.attention(x, x, x, mask=tgt_mask)
         x = self.layer_norm1(x + x_attention)
         x_attention_source_target = self.attention_source_target(
-            x, encoder_output, encoder_output, mask=src_tgt_mask
+            x, encoder_output, encoder_output, mask=src_tgt_padding_mask
         )
         x = self.layer_norm2(x + x_attention_source_target)
         x_ff = self.feed_forward(x)
