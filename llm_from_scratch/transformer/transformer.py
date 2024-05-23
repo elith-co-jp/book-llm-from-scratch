@@ -45,14 +45,6 @@ class Encoder(nn.Module):
         )
 
     def forward(self, x: Tensor, src_padding_mask: Tensor | None = None) -> Tensor:
-        """Forward.
-
-        Args:
-            x (Tensor): Input tensor. shapeは(batch_size, sequence_length, 1).
-
-        Returns:
-            Tensor: Output tensor. shapeは(batch_size, sequence_length, d_model).
-        """
         x = self.embedding(x)
         x = self.pe(x)
         for block in self.blocks:
