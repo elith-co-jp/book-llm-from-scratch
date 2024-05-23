@@ -115,13 +115,18 @@ class Decoder(nn.Module):
         self,
         x: Tensor,
         encoder_output: Tensor,
-        mask: Tensor | None = None,
-        src_tgt_mask: Tensor | None = None,
+        tgt_mask: Tensor | None = None,
+        src_tgt_padding_mask: Tensor | None = None,
     ) -> Tensor:
         x = self.embedding(x)
         x = self.pe(x)
         for block in self.blocks:
-            x = block(x, encoder_output, mask=mask, src_tgt_mask=src_tgt_mask)
+            x = block(
+                x,
+                encoder_output,
+                tgt_mask=tgt_mask,
+                src_tgt_padding_mask=src_tgt_padding_mask,
+            )
         return x
 
 
