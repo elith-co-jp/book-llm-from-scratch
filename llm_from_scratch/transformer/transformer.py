@@ -160,7 +160,7 @@ class Transformer(nn.Module):
         return output
 
     @torch.inference_mode
-    def inference(self, src: Tensor, bos_token: int) -> Tensor:
+    def inference(self, src: Tensor, bos_token: int, eos_token: int) -> Tensor:
         tgt_tokens = torch.tensor([[bos_token]]).to(src.device)
 
         encoder_output = self.encoder(src)
@@ -169,7 +169,7 @@ class Transformer(nn.Module):
             pred = self.linear(decoder_output)
             pred = torch.tensor([[pred[0, -1].argmax().item()]]).to(src.device)
             tgt_tokens = torch.cat((tgt_tokens, pred), axis=-1)
-            if pred[0, 0].item() == 3:
+            if pred[0, 0].item() == eos_token:
                 break
 
         return tgt_tokens
