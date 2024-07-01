@@ -152,9 +152,9 @@ class Transformer(nn.Module):
         tgt_mask: Tensor | None = None,
         src_tgt_mask: Tensor | None = None,
     ) -> Tensor:
-        encoder_output = self.encoder(src, mask=src_mask)
+        encoder_output = self.encoder(src, src_padding_mask=src_mask)
         decoder_output = self.decoder(
-            tgt, encoder_output, mask=tgt_mask, src_tgt_mask=src_tgt_mask
+            tgt, encoder_output, tgt_mask=tgt_mask, src_tgt_mask=src_tgt_mask
         )
         output = self.linear(decoder_output)
         return output
