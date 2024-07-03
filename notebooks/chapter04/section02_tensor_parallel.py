@@ -23,8 +23,52 @@ tp_mesh = init_device_mesh("cuda", (8,))
 rank = tp_mesh.get_rank()
 
 
-def train(model, batch_size, n_epochs, train_dataset, dataset_info):
-    device = "cuda"
+def train(model, batch_size, n_epochs, train_dataset, dataset_info, device):
+    embedding_dim = 512
+    n_blocks = 6
+    n_heads = 8
+    expansion_rate = 1
+
+    # 最も長い文章の長さを取得
+    model = Transformer(
+        dataset_info["src_vocab_size"],
+        dataset_info["tgt_vocab_size"],
+        max_sequence_len=dataset_info["max_sequence_len"],
+        d_model=embedding_dim,
+        n_blocks=n_blocks,
+        n_heads=n_heads,
+        d_k=embedding_dim,
+        d_v=embedding_dim,
+        d_ff=embedding_dim * expansion_rate,
+    ).to(device)
+
+    # レイヤーごとに並列化の方法を定義
+    for module in [model.encoder, model.decoder]:
+        # エンコーダ・デコーダのブロック
+        for block in module.blocks:
+            tp_plan_block = {
+                "attention.linear_o": RowwiseParallel(),
+                "feed_forward.0": ColwiseParallel(),
+                "feed_forward.2": RowwiseParallel(),
+            }
+            parallelize_module(
+                module=block,
+                device_mesh=tp_mesh,
+                parallelize_plan=tp_plan_block,
+            )
+            # マルチヘッドアテンションのヘッドごと
+            for attention in block.attention.heads:
+                tp_plan_attention = {
+                    "linear_q": ColwiseParallel(),
+                    "linear_k": ColwiseParallel(),
+                    "linear_v": ColwiseParallel(),
+                }
+                parallelize_module(
+                    module=attention,
+                    device_mesh=tp_mesh,
+                    parallelize_plan=tp_plan_attention,
+                )
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
@@ -78,58 +122,16 @@ def train(model, batch_size, n_epochs, train_dataset, dataset_info):
 
 
 def main():
+    device = "cuda"
     data_dir = Path("small_parallel_enja")
     train_dataset, dataset_info = load_dataset(data_dir)
 
-    embedding_dim = 512
-    n_blocks = 6
-    n_heads = 8
-    expansion_rate = 1
-
-    # 最も長い文章の長さを取得
-    model = Transformer(
-        dataset_info["src_vocab_size"],
-        dataset_info["tgt_vocab_size"],
-        max_sequence_len=dataset_info["max_sequence_len"],
-        d_model=embedding_dim,
-        n_blocks=n_blocks,
-        n_heads=n_heads,
-        d_k=embedding_dim,
-        d_v=embedding_dim,
-        d_ff=embedding_dim * expansion_rate,
-    )
-
-    # encoder embedding
-    for module in [model.encoder, model.decoder]:
-        for block in module.blocks:
-            tp_plan_block = {
-                "attention.linear_o": RowwiseParallel(),
-                "feed_forward.0": ColwiseParallel(),
-                "feed_forward.2": RowwiseParallel(),
-            }
-            parallelize_module(
-                module=block,
-                device_mesh=tp_mesh,
-                parallelize_plan=tp_plan_block,
-            )
-            for attention in block.attention.heads:
-                tp_plan_attention = {
-                    "linear_q": ColwiseParallel(),
-                    "linear_k": ColwiseParallel(),
-                    "linear_v": ColwiseParallel(),
-                }
-                parallelize_module(
-                    module=attention,
-                    device_mesh=tp_mesh,
-                    parallelize_plan=tp_plan_attention,
-                )
-
     train(
-        model,
         batch_size=64,
         n_epochs=10,
         train_dataset=train_dataset,
         dataset_info=dataset_info,
+        device=device,
     )
     if rank == 0:
         print(torch.cuda.max_memory_allocated())
