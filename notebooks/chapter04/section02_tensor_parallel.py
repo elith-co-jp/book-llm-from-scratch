@@ -131,6 +131,8 @@ def main():
         train_dataset=train_dataset,
         dataset_info=dataset_info,
     )
+    if rank == 0:
+        print(torch.cuda.max_memory_allocated())
 
 
 if __name__ == "__main__":
