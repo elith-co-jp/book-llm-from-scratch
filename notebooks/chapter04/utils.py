@@ -1,10 +1,11 @@
-import torch
+# 実行コマンド例: python section02_tensor_parallel.py
 from pathlib import Path
-from torch import Tensor
 from typing import Iterator
 
-from torchtext.vocab import build_vocab_from_iterator
+import torch
+from torch import Tensor
 from torchtext import transforms
+from torchtext.vocab import build_vocab_from_iterator
 
 
 def create_padding_mask(pad_id: int, batch_tokens: Tensor):
@@ -39,19 +40,21 @@ def iter_corpus(
             yield line.split()
 
 
-def create_collate_fn(src_transforms, tgt_transforms):
-    def collate_fn(batch: Tensor) -> tuple[Tensor, Tensor]:
+class Collator:
+    def __init__(self, src_transforms, tgt_transforms):
+        self.src_transforms = src_transforms
+        self.tgt_transforms = tgt_transforms
+
+    def __call__(self, batch):
         src_texts, tgt_texts = [], []
         for s, t in batch:
             src_texts.append(s)
             tgt_texts.append(t)
 
-        src_texts = src_transforms(src_texts)
-        tgt_texts = tgt_transforms(tgt_texts)
+        src_texts = self.src_transforms(src_texts)
+        tgt_texts = self.tgt_transforms(tgt_texts)
 
         return src_texts, tgt_texts
-
-    return collate_fn
 
 
 # データの準備
@@ -87,7 +90,7 @@ def load_dataset(data_dir):
         "src_vocab_size": len(vocab_ja),
         "tgt_vocab_size": len(vocab_en),
         "max_sequence_len": max_len,
-        "collate_fn": create_collate_fn(src_transforms, tgt_transforms),
+        "collate_fn": Collator(src_transforms, tgt_transforms),
         "vocab_src": vocab_ja,
         "vocab_tgt": vocab_en,
     }
