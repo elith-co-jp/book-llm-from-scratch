@@ -3,6 +3,9 @@ from pathlib import Path
 from torch import Tensor
 from typing import Iterator
 
+from torchtext.vocab import build_vocab_from_iterator
+from torchtext import transforms
+
 
 def create_padding_mask(pad_id: int, batch_tokens: Tensor):
     # batch_tokens.shape == (batch_size, sequence_length)
@@ -88,4 +91,4 @@ def load_dataset(data_dir):
         "vocab_src": vocab_ja,
         "vocab_tgt": vocab_en,
     }
-    train_dataset, dataset_info
+    return train_dataset, dataset_info
