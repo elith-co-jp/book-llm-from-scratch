@@ -1,3 +1,4 @@
+# 実行コマンド例: torchrun --standalone --nproc_per_node=4 section02_tensor_parallel.py
 from pathlib import Path
 
 import torch
@@ -19,7 +20,7 @@ from .utils import (
     load_dataset,
 )
 
-tp_mesh = init_device_mesh("cuda", (8,))
+tp_mesh = init_device_mesh("cuda", (4,))
 rank = tp_mesh.get_rank()
 
 
