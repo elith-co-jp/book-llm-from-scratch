@@ -154,7 +154,7 @@ class Transformer(nn.Module):
     ) -> Tensor:
         encoder_output = self.encoder(src, src_padding_mask=src_mask)
         decoder_output = self.decoder(
-            tgt, encoder_output, tgt_mask=tgt_mask, src_tgt_mask=src_tgt_mask
+            tgt, encoder_output, tgt_mask=tgt_mask, src_tgt_padding_mask=src_tgt_mask
         )
         output = self.linear(decoder_output)
         return output
