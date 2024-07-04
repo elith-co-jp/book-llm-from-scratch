@@ -1,4 +1,5 @@
 # 実行コマンド例: python section02_tensor_parallel.py
+import functools
 import os
 from pathlib import Path
 
@@ -8,11 +9,12 @@ import torch.nn as nn
 from torch.distributed import init_process_group
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
+from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
-from utils import create_padding_mask, create_subsequent_mask, load_dataset
 
+from utils import create_padding_mask, create_subsequent_mask, load_dataset
 from llm_from_scratch.transformer.transformer import Transformer
 
 
@@ -39,8 +41,14 @@ def train(rank, n_gpu, batch_size, n_epochs, train_dataset, dataset_info):
         d_ff=embedding_dim * expansion_rate,
     ).to(rank)
 
-    # ここで各 rank の GPU にモデルを配置
-    model = FSDP(model, cpu_offload=CPUOffload(offload_params=True))
+    my_auto_wrap_policy = functools.partial(
+        size_based_auto_wrap_policy, min_num_params=100
+    )
+    model = FSDP(
+        model,
+        fsdp_auto_wrap_policy=my_auto_wrap_policy,
+        cpu_offload=CPUOffload(offload_params=True),
+    )
 
     sampler = DistributedSampler(
         train_dataset, num_replicas=n_gpu, rank=rank, shuffle=True
