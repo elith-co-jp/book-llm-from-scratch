@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 from llm_from_scratch.transformer.transformer import Transformer
 
-from .utils import (
+from utils import (
     create_padding_mask,
     create_subsequent_mask,
     load_dataset,

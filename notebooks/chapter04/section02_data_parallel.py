@@ -17,14 +17,14 @@ from tqdm import tqdm
 
 from llm_from_scratch.transformer.transformer import Transformer
 
-from .utils import create_padding_mask, create_subsequent_mask, load_dataset
+from utils import create_padding_mask, create_subsequent_mask, load_dataset
 
 
 def train(rank, n_gpu, batch_size, n_epochs, train_dataset, dataset_info):
     init_process_group("nccl", rank=rank, world_size=n_gpu)
     torch.manual_seed(0)
     torch.cuda.set_device(rank)
-    # create local model
+
     embedding_dim = 512
     n_blocks = 6
     n_heads = 8
