@@ -1,9 +1,10 @@
+# 実行コマンド例: python section02_tensor_parallel.py
 import os
 from pathlib import Path
 from typing import Iterator
 
 import torch
-import torch.distributed as dist
+from torch.distributed import init_process_group
 import torch.multiprocessing as mp
 import torch.nn as nn
 from torch import Tensor
@@ -20,7 +21,7 @@ from .utils import create_padding_mask, create_subsequent_mask, load_dataset
 
 
 def train(rank, n_gpu, batch_size, n_epochs, train_dataset, dataset_info):
-    dist.init_process_group("gloo", rank=rank, world_size=n_gpu)
+    init_process_group("nccl", rank=rank, world_size=n_gpu)
     torch.manual_seed(0)
     torch.cuda.set_device(rank)
     # create local model
