@@ -1,72 +1,65 @@
 import json
-import warnings
 import os
-
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-warnings.filterwarnings("ignore")
+import warnings
 
 import torch
 from datasets import Dataset
-from langchain.text_splitter import SpacyTextSplitter
 from omegaconf import OmegaConf
-
-from transformers import DataCollatorForLanguageModeling
 from transformers import (
-    AutoModelForCausalLM,
+    AutoConfig,
+    DataCollatorForLanguageModeling,
+    GPT2LMHeadModel,
     AutoTokenizer,
     Trainer,
     TrainingArguments,
 )
 
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-def text_splitter(document: str, max_length: int = 512) -> list[str]:
-    text_splitter = SpacyTextSplitter(separator="[SEP]")
-    docs = text_splitter.split_text(document.replace("\n", ""))
-
-    chunks = []
-    chunk = ""
-    for text in docs[0].split("[SEP]"):
-        if len(chunk) + len(text) > max_length:
-            chunks.append(chunk)
-            chunk = text
-        else:
-            chunk += text
-    if chunk:
-        chunks.append(chunk)
-    return chunks
-
+warnings.filterwarnings("ignore")
 
 # データセット読み込み
-with open("arxiv.jsonl", "r") as f:
-    texts = [json.loads(line)["text"] for line in f][:5]
-    # dataset = Dataset.from_list([json.loads(line) for line in f][:5])
+with open("chunked_dataset.jsonl", "r") as f:
+    dataset = Dataset.from_list([json.loads(line) for line in f])
 
-dataset_texts = []
-for text in texts:
-    dataset_texts.extend(text_splitter(text))
-dataset = Dataset.from_list([{"text": text} for text in dataset_texts])
+
+# トークナイザの読み込み
+tokenizer = AutoTokenizer.from_pretrained("tokenizer")
+
+# モデルの定義
+config = AutoConfig.from_pretrained(
+    "gpt2",
+    vocab_size=len(tokenizer),
+    n_ctx=512,
+    bos_token_id=tokenizer.bos_token_id,
+    eos_token_id=tokenizer.eos_token_id,
+)
+model = GPT2LMHeadModel(config)
 
 # コンフィグ読み込み
 config_path = "./train_base.yaml"
 config = OmegaConf.load(config_path)
 
-# モデルの定義
-model = AutoModelForCausalLM.from_pretrained(
-    config.model.model, torch_dtype=torch.float16, use_cache=config.model.use_cache
-)
-tokenizer = AutoTokenizer.from_pretrained(
-    config.model.tokenizer,
-    add_eos_token=True,  # EOSの追加を指示 defaultはFalse
-)
-
-dataset = dataset.map(lambda data: tokenizer(data["text"]))
-
 data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
 
+# データセットのトークン化
+dataset = dataset.map(lambda data: tokenizer(data["text"]), batched=True)
+
+
 # 学習
-tokenizer.pad_token = tokenizer.eos_token
-training_args = TrainingArguments(**config.train)
+training_args = TrainingArguments(
+    output_dir="./output",
+    logging_strategy="steps",
+    logging_steps=50,
+    save_strategy="steps",
+    save_steps=50,
+    num_train_epochs=3,
+    per_device_train_batch_size=3,
+    learning_rate=1e-6,
+    weight_decay=0.01,
+    warmup_ratio=0.1,
+    optim="adamW_torch",
+)
 trainer = Trainer(
     model=model,
     tokenizer=tokenizer,
@@ -78,4 +71,5 @@ trainer = Trainer(
 with torch.autocast("cuda"):
     trainer.train()
 
+# モデルの保存
 trainer.save_model("output")
