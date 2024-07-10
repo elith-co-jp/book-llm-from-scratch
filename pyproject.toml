@@ -19,6 +19,9 @@ torchtext = "^0.17.0"
 tqdm = "^4.66.2"
 ipywidgets = "^8.1.2"
 scipy = "^1.13.0"
+datasets = "^2.20.0"
+omegaconf = "^2.3.0"
+transformers = "^4.42.3"
 
 
 [build-system]
