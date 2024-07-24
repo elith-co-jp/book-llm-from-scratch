@@ -4,7 +4,6 @@ import warnings
 
 import torch
 from datasets import Dataset
-from omegaconf import OmegaConf
 from transformers import (
     AutoConfig,
     DataCollatorForLanguageModeling,
@@ -36,24 +35,21 @@ config = AutoConfig.from_pretrained(
 )
 model = GPT2LMHeadModel(config)
 
-# コンフィグ読み込み
-config_path = "./train_base.yaml"
-config = OmegaConf.load(config_path)
-
 data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
-
 # データセットのトークン化
-dataset = dataset.map(lambda data: tokenizer(data["text"]), batched=True)
+dataset = dataset.map(
+    lambda data: tokenizer(data["text"], truncation=True, max_length=512), batched=True
+)
 
 
 # 学習
 training_args = TrainingArguments(
     output_dir="./output",
     logging_strategy="steps",
-    logging_steps=50,
+    logging_steps=100,
     save_strategy="steps",
-    save_steps=50,
-    num_train_epochs=3,
+    save_steps=1000,
+    num_train_epochs=1,
     per_device_train_batch_size=3,
     learning_rate=1e-6,
     weight_decay=0.01,
@@ -72,4 +68,4 @@ with torch.autocast("cuda"):
     trainer.train()
 
 # モデルの保存
-trainer.save_model("output")
+trainer.save_model("pretrained_model")
