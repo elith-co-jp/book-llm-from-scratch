@@ -1,29 +1,22 @@
-model:
-  model: gpt2
-  tokenizer: gpt2
-  use_cache: False
-  max_length: 512
-
-train: # huggingfaceのTrainingArgumentsで利用
-  output_dir: ../outputs
-  evaluation_strategy: steps
-  logging_strategy: steps
-  save_strategy: steps
-  learning_rate: 0.000001
-  num_train_epochs: 3
-  per_device_train_batch_size: 3
-  per_device_eval_batch_size: 3
-  gradient_accumulation_steps: 2
-  gradient_checkpointing: True
-  weight_decay: 0.01
-  warmup_ratio: 0.1
-  optim: adamw_torch
-  fp16: True
-  bf16: False
-  dataloader_num_workers: 1
-  eval_steps: 50
-  save_steps: 50
-  logging_steps: 50
-  save_total_limit: 2
-  save_on_each_node: False
-  deepspeed: ./ds_config.json
+output_dir: ./outputs
+evaluation_strategy: steps
+logging_strategy: steps
+save_strategy: steps
+learning_rate: 0.000001
+num_train_epochs: 3
+per_device_train_batch_size: 3
+per_device_eval_batch_size: 3
+gradient_accumulation_steps: 2
+gradient_checkpointing: True
+weight_decay: 0.01
+warmup_ratio: 0.1
+optim: adamw_torch
+fp16: True
+bf16: False
+dataloader_num_workers: 1
+eval_steps: 50
+save_steps: 50
+logging_steps: 50
+save_total_limit: 2
+save_on_each_node: False
+deepspeed: ./ds_config.json
