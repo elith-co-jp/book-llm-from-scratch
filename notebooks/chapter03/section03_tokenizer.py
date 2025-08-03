@@ -320,17 +320,25 @@ def demonstrate_bpe():
     """
     print("\n=== BPEアルゴリズムのデモ ===")
     
-    # コーパスの準備
+    # コーパスの準備（'Token'の頻度を意図的に上げる）
     corpus = [
         "Large language models are transforming the landscape of natural language processing.",
-        "Understanding tokenization is crucial for building efficient models.",
+        "Understanding tokenization is crucial for building efficient models.", 
         "This chapter explores the intricacies of BPE and its impact on LLM performance.",
         "By mastering these techniques, you can enhance the capabilities of your models.",
+        "Each token in a sequence carries semantic meaning and contextual information.",
+        "Modern tokenizers split text into meaningful subword units called tokens.",
+        "A well-designed token vocabulary improves model efficiency and accuracy.",
+        "Token-level representations enable better handling of rare and unseen words.",
+        "Tokenization strategies directly affect how models process and understand text.",
+        "The choice of tokenization method influences both training speed and final performance.",
+        "Effective token boundaries help preserve linguistic structures in the data.",
+        "Language models and LLMs benefit from sophisticated tokenization approaches.",
     ]
 
-    # BPEトークナイザーの学習
+    # BPEトークナイザーの学習（マージ回数を増やす）
     bpe_tokenizer = BPETokenizer()
-    bpe_tokenizer.train(corpus, num_merges=10)
+    bpe_tokenizer.train(corpus, num_merges=100)
     
     print("Vocabulary:", bpe_tokenizer.vocab)
     print("Merges:", bpe_tokenizer.merges)
