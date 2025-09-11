@@ -1,42 +1,37 @@
-"""Simple character-level tokenizer for GPT."""
+"""GPT用のシンプルな文字レベルトークナイザ."""
 
 
 class SimpleTokenizer:
-    """Character-level tokenizer for text processing."""
-    
-    def __init__(self, text):
-        """
-        Initialize tokenizer with vocabulary from text.
+    def __init__(self, text: str):
+        """文字レベルのテキスト処理用トークナイザ.
         
         Args:
-            text: Text corpus to build vocabulary from
+            text (str): 語彙を構築するためのテキストコーパス
         """
-        # Build vocabulary from unique characters
+        # 一意な文字から語彙を構築
         chars = sorted(list(set(text)))
         self.vocab_size = len(chars)
         self.char_to_idx = {ch: i for i, ch in enumerate(chars)}
         self.idx_to_char = {i: ch for ch, i in self.char_to_idx.items()}
     
-    def encode(self, text):
-        """
-        Encode text to token IDs.
+    def encode(self, text: str) -> list[int]:
+        """テキストをトークンIDにエンコードする.
         
         Args:
-            text: Input text string
+            text (str): 入力テキスト文字列
             
         Returns:
-            List of token IDs
+            list[int]: トークンIDのリスト
         """
         return [self.char_to_idx.get(ch, 0) for ch in text]
     
-    def decode(self, tokens):
-        """
-        Decode token IDs to text.
+    def decode(self, tokens) -> str:
+        """トークンIDをテキストにデコードする.
         
         Args:
-            tokens: List or tensor of token IDs
+            tokens: トークンIDのリストまたはテンソル
             
         Returns:
-            Decoded text string
+            str: デコードされたテキスト文字列
         """
         return ''.join([self.idx_to_char.get(int(idx), '') for idx in tokens])

@@ -1,4 +1,4 @@
-"""Training utilities for GPT model."""
+"""GPTモデル用の学習ユーティリティ."""
 
 import time
 import torch
@@ -8,25 +8,22 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
 class GPTTrainer:
-    """Trainer class for GPT model."""
-    
     def __init__(self, model, train_loader, val_loader, 
-                 learning_rate=3e-4, weight_decay=0.1, 
-                 warmup_steps=1000, max_steps=10000,
-                 grad_clip=1.0, device=None):
-        """
-        Initialize trainer with model and data loaders.
+                 learning_rate: float = 3e-4, weight_decay: float = 0.1, 
+                 warmup_steps: int = 1000, max_steps: int = 10000,
+                 grad_clip: float = 1.0, device=None):
+        """GPTモデル用のトレーナークラス.
         
         Args:
-            model: GPT model instance
-            train_loader: Training data loader
-            val_loader: Validation data loader
-            learning_rate: Learning rate
-            weight_decay: Weight decay for AdamW
-            warmup_steps: Number of warmup steps
-            max_steps: Maximum training steps
-            grad_clip: Gradient clipping value
-            device: Device to train on
+            model: GPTモデルインスタンス
+            train_loader: 学習用データローダー
+            val_loader: 検証用データローダー
+            learning_rate (float): 学習率
+            weight_decay (float): AdamW用の重み減衰
+            warmup_steps (int): ウォームアップステップ数
+            max_steps (int): 最大学習ステップ数
+            grad_clip (float): 勾配クリッピング値
+            device: 学習を行うデバイス
         """
         self.model = model
         self.train_loader = train_loader
@@ -35,25 +32,25 @@ class GPTTrainer:
         self.warmup_steps = warmup_steps
         self.grad_clip = grad_clip
         
-        # Setup device
+        # デバイスを設定
         if device is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
             self.device = device
         self.model = self.model.to(self.device)
         
-        # Setup optimizer
+        # オプティマイザを設定
         self.optimizer = self.configure_optimizer(learning_rate, weight_decay)
         
-        # Setup scheduler
+        # スケジューラを設定
         self.scheduler = CosineAnnealingLR(
             self.optimizer, 
             T_max=max_steps - warmup_steps
         )
         
-    def configure_optimizer(self, learning_rate, weight_decay):
-        """Configure AdamW optimizer with weight decay."""
-        # Separate parameters for weight decay
+    def configure_optimizer(self, learning_rate: float, weight_decay: float):
+        """重み減衰付きAdamWオプティマイザを設定する."""
+        # 重み減衰用にパラメータを分離
         decay_params = []
         no_decay_params = []
         
@@ -72,18 +69,18 @@ class GPTTrainer:
         optimizer = AdamW(optimizer_groups, lr=learning_rate, betas=(0.9, 0.95))
         return optimizer
     
-    def get_lr(self, step):
-        """Calculate learning rate with warmup."""
+    def get_lr(self, step: int) -> float:
+        """ウォームアップ付きの学習率を計算する."""
         if step < self.warmup_steps:
-            # Linear warmup
+            # リニアウォームアップ
             return self.optimizer.param_groups[0]['lr'] * step / self.warmup_steps
         else:
-            # Use scheduler
+            # スケジューラを使用
             return self.optimizer.param_groups[0]['lr']
     
     @torch.no_grad()
-    def evaluate(self, max_batches=10):
-        """Evaluate model on validation set."""
+    def evaluate(self, max_batches: int = 10) -> float:
+        """検証セットでモデルを評価する."""
         self.model.eval()
         losses = []
         
@@ -98,34 +95,33 @@ class GPTTrainer:
         self.model.train()
         return np.mean(losses) if losses else float('inf')
     
-    def train_step(self, x, y):
-        """Single training step."""
-        # Forward pass
+    def train_step(self, x: torch.Tensor, y: torch.Tensor) -> float:
+        """単一の学習ステップ."""
+        # 順伝播
         logits, loss = self.model(x, y)
         
-        # Backward pass
+        # 逆伝播
         self.optimizer.zero_grad()
         loss.backward()
         
-        # Gradient clipping
+        # 勾配クリッピング
         if self.grad_clip > 0:
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
         
-        # Optimizer step
+        # オプティマイザステップ
         self.optimizer.step()
         
         return loss.item()
     
-    def train(self, log_interval=100, eval_interval=500):
-        """
-        Main training loop.
+    def train(self, log_interval: int = 100, eval_interval: int = 500) -> dict:
+        """メイン学習ループ.
         
         Args:
-            log_interval: Steps between logging
-            eval_interval: Steps between evaluation
+            log_interval (int): ログ出力間隔ステップ数
+            eval_interval (int): 評価間隔ステップ数
             
         Returns:
-            Dictionary with training and validation losses
+            dict: 学習損失と検証損失を含む辞書
         """
         self.model.train()
         
@@ -135,8 +131,8 @@ class GPTTrainer:
         step = 0
         epoch = 0
         
-        print(f"Training on device: {self.device}")
-        print(f"Model parameters: {sum(p.numel() for p in self.model.parameters())/1e6:.2f}M")
+        print(f"学習デバイス: {self.device}")
+        print(f"モデルパラメータ数: {sum(p.numel() for p in self.model.parameters())/1e6:.2f}M")
         
         start_time = time.time()
         
@@ -149,15 +145,15 @@ class GPTTrainer:
                 
                 x, y = x.to(self.device), y.to(self.device)
                 
-                # Training step
+                # 学習ステップ
                 loss = self.train_step(x, y)
                 train_losses.append(loss)
                 
-                # Update learning rate
+                # 学習率を更新
                 if step >= self.warmup_steps:
                     self.scheduler.step()
                 
-                # Logging
+                # ログ出力
                 if step % log_interval == 0:
                     avg_loss = np.mean(train_losses[-log_interval:]) if len(train_losses) >= log_interval else loss
                     elapsed = time.time() - start_time
@@ -166,36 +162,36 @@ class GPTTrainer:
                           f"LR: {self.get_lr(step):.6f} | "
                           f"Time: {elapsed:.1f}s")
                 
-                # Evaluation
+                # 評価
                 if step % eval_interval == 0 and step > 0:
                     val_loss = self.evaluate()
                     val_losses.append(val_loss)
-                    print(f"Validation loss: {val_loss:.4f}")
+                    print(f"検証損失: {val_loss:.4f}")
                 
                 step += 1
         
-        print(f"Training completed! Total time: {time.time() - start_time:.1f}s")
+        print(f"学習完了！総時間: {time.time() - start_time:.1f}s")
         
         return {
             'train_losses': train_losses,
             'val_losses': val_losses
         }
     
-    def save_checkpoint(self, path):
-        """Save model checkpoint."""
+    def save_checkpoint(self, path: str):
+        """モデルチェックポイントを保存する."""
         checkpoint = {
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler_state_dict': self.scheduler.state_dict() if self.scheduler else None,
         }
         torch.save(checkpoint, path)
-        print(f"Checkpoint saved to {path}")
+        print(f"チェックポイントを{path}に保存しました")
     
-    def load_checkpoint(self, path):
-        """Load model checkpoint."""
+    def load_checkpoint(self, path: str):
+        """モデルチェックポイントを読み込む."""
         checkpoint = torch.load(path, map_location=self.device)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         if self.scheduler and checkpoint.get('scheduler_state_dict'):
             self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-        print(f"Checkpoint loaded from {path}")
+        print(f"{path}からチェックポイントを読み込みました")

@@ -1,59 +1,55 @@
-"""Dataset and data loading utilities for GPT training."""
+"""GPT学習用のデータセットとデータローディングユーティリティ."""
 
 import torch
 from torch.utils.data import Dataset, DataLoader
 
 
 class TextDataset(Dataset):
-    """Dataset for autoregressive language modeling."""
-    
-    def __init__(self, text, tokenizer, block_size=128):
-        """
-        Initialize dataset with tokenized text.
+    def __init__(self, text: str, tokenizer, block_size: int = 128):
+        """自己回帰言語モデリング用のデータセット.
         
         Args:
-            text: Input text corpus
-            tokenizer: Tokenizer instance
-            block_size: Maximum sequence length
+            text (str): 入力テキストコーパス
+            tokenizer: トークナイザインスタンス
+            block_size (int): 最大シーケンス長
         """
         self.tokenizer = tokenizer
         self.block_size = block_size
         
-        # Tokenize the entire text
+        # テキスト全体をトークナイズ
         self.tokens = tokenizer.encode(text)
-        print(f"Dataset size: {len(self.tokens)} tokens")
+        print(f"データセットサイズ: {len(self.tokens)} トークン")
     
     def __len__(self):
         return len(self.tokens) - self.block_size
     
-    def __getitem__(self, idx):
-        # Get input and target sequences
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        # 入力とターゲットシーケンスを取得
         chunk = self.tokens[idx:idx + self.block_size + 1]
         x = torch.tensor(chunk[:-1], dtype=torch.long)
         y = torch.tensor(chunk[1:], dtype=torch.long)
         return x, y
 
 
-def create_dataloaders(text, tokenizer, block_size=128, batch_size=64, 
-                       train_split=0.9, num_workers=0):
-    """
-    Create training and validation dataloaders.
+def create_dataloaders(text: str, tokenizer, block_size: int = 128, batch_size: int = 64, 
+                       train_split: float = 0.9, num_workers: int = 0) -> tuple[DataLoader, DataLoader]:
+    """学習用と検証用のデータローダーを作成する.
     
     Args:
-        text: Input text corpus
-        tokenizer: Tokenizer instance
-        block_size: Maximum sequence length
-        batch_size: Batch size for training
-        train_split: Fraction of data for training
-        num_workers: Number of data loading workers
+        text (str): 入力テキストコーパス
+        tokenizer: トークナイザインスタンス
+        block_size (int): 最大シーケンス長
+        batch_size (int): 学習用バッチサイズ
+        train_split (float): 学習用データの割合
+        num_workers (int): データローディングワーカー数
     
     Returns:
-        Tuple of (train_loader, val_loader)
+        tuple[DataLoader, DataLoader]: (train_loader, val_loader)のタプル
     """
-    # Create dataset
+    # データセットを作成
     dataset = TextDataset(text, tokenizer, block_size)
     
-    # Split into train and validation
+    # 学習用と検証用に分割
     n = len(dataset)
     n_train = int(train_split * n)
     n_val = n - n_train
@@ -62,7 +58,7 @@ def create_dataloaders(text, tokenizer, block_size=128, batch_size=64,
         dataset, [n_train, n_val]
     )
     
-    # Create dataloaders
+    # データローダーを作成
     train_loader = DataLoader(
         train_dataset, 
         batch_size=batch_size, 

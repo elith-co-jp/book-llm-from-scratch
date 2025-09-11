@@ -25,7 +25,7 @@ class GPTMultiHeadAttention(nn.Module):
         self.n_embd = n_embd
         d_k = d_v = n_embd // n_head
         
-        # Use transformer MultiHeadAttention
+        # transformer の MultiHeadAttention を使用
         self.attention = MultiHeadAttention(n_head, d_k, d_v, n_embd)
         self.resid_dropout = nn.Dropout(dropout)
         
@@ -38,16 +38,16 @@ class GPTMultiHeadAttention(nn.Module):
         Returns:
             torch.Tensor: 出力テンソル. shapeは(batch_size, seq_len, n_embd).
         """
-        B, T, C = x.size()  # batch, sequence, embedding
+        B, T, C = x.size()  # バッチ, シーケンス, 埋め込み
         
-        # Create causal mask (prevent attending to future tokens)
+        # causal mask を作成（未来のトークンへの注意を防ぐ）
         causal_mask = torch.triu(torch.ones(T, T, device=x.device), diagonal=1).bool()
-        causal_mask = causal_mask.unsqueeze(0).expand(B, -1, -1)  # (B, T, T)
+        causal_mask = causal_mask.unsqueeze(0).expand(B, -1, -1)  # (バッチ, T, T)
         
-        # Self-attention: query = key = value = x
+        # セルフアテンション: query = key = value = x
         y = self.attention(x, x, x, mask=causal_mask)
         
-        # Apply residual dropout
+        # 残差ドロップアウトを適用
         y = self.resid_dropout(y)
         return y
 
@@ -104,22 +104,22 @@ class GPT(nn.Module):
         self.block_size = block_size
         self.n_embd = n_embd
         
-        # Token embedding and positional encoding
+        # トークン埋め込みと位置エンコーディング
         self.token_embedding = nn.Embedding(vocab_size, n_embd)
         self.position_encoding = PositionalEncoding(n_embd, block_size)
         self.drop = nn.Dropout(dropout)
         
-        # Transformer blocks
+        # Transformer ブロック
         self.blocks = nn.Sequential(*[
             TransformerBlock(n_embd, n_head, dropout) 
             for _ in range(n_layer)
         ])
         
-        # Final layer norm and output projection
+        # 最終レイヤー正規化と出力射影
         self.ln_f = LayerNorm(n_embd)
         self.head = nn.Linear(n_embd, vocab_size, bias=False)
         
-        # Initialize weights
+        # 重みの初期化
         self.apply(self._init_weights)
         
     def _init_weights(self, module):
@@ -147,19 +147,19 @@ class GPT(nn.Module):
         """
         B, T = idx.shape
         
-        # Token embedding and positional encoding
+        # トークン埋め込みと位置エンコーディング
         tok_emb = self.token_embedding(idx)
         x = self.position_encoding(tok_emb)
         x = self.drop(x)
         
-        # Forward through transformer blocks
+        # Transformer ブロックを通して順伝搬
         x = self.blocks(x)
         x = self.ln_f(x)
         
-        # Project to vocabulary
+        # 語彙への射影
         logits = self.head(x)
         
-        # Calculate loss if targets provided
+        # ターゲットが提供された場合は損失を計算
         loss = None
         if targets is not None:
             B, T, C = logits.shape
@@ -183,19 +183,19 @@ class GPT(nn.Module):
             torch.Tensor: 生成されたトークンID. shapeは(batch_size, seq_len + max_new_tokens).
         """
         for _ in range(max_new_tokens):
-            # Crop to block size
+            # ブロックサイズにクロップ
             idx_cond = idx if idx.size(1) <= self.block_size else idx[:, -self.block_size:]
             
-            # Get predictions
+            # 予測を取得
             logits, _ = self(idx_cond)
             logits = logits[:, -1, :] / temperature
             
-            # Apply top-k sampling
+            # Top-k サンプリングを適用
             if top_k is not None:
                 v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
                 logits[logits < v[:, [-1]]] = -float('Inf')
             
-            # Sample from distribution
+            # 分布からサンプリング
             probs = F.softmax(logits, dim=-1)
             idx_next = torch.multinomial(probs, num_samples=1)
             idx = torch.cat((idx, idx_next), dim=1)
@@ -210,7 +210,7 @@ class GPTConfig:
         Args:
             **kwargs: 設定パラメータ
         """
-        # Model configuration
+        # モデル設定
         self.vocab_size = kwargs.get('vocab_size', 50257)
         self.n_embd = kwargs.get('n_embd', 768)
         self.n_layer = kwargs.get('n_layer', 12)
@@ -218,19 +218,19 @@ class GPTConfig:
         self.block_size = kwargs.get('block_size', 1024)
         self.dropout = kwargs.get('dropout', 0.1)
         
-        # Training configuration
+        # 学習設定
         self.batch_size = kwargs.get('batch_size', 8)
         self.learning_rate = kwargs.get('learning_rate', 6e-4)
         self.weight_decay = kwargs.get('weight_decay', 0.1)
         self.max_steps = kwargs.get('max_steps', 100000)
         self.warmup_steps = kwargs.get('warmup_steps', 2000)
         
-        # Optimization configuration
+        # 最適化設定
         self.gradient_accumulation_steps = kwargs.get('gradient_accumulation_steps', 4)
         self.grad_clip = kwargs.get('grad_clip', 1.0)
         self.use_amp = kwargs.get('use_amp', True)
         
-        # Evaluation configuration
+        # 評価設定
         self.eval_interval = kwargs.get('eval_interval', 500)
         self.eval_steps = kwargs.get('eval_steps', 50)
         self.save_interval = kwargs.get('save_interval', 5000)
