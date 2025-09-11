@@ -10,9 +10,14 @@ from llm_from_scratch.transformer.attention import MultiHeadAttention
 
 
 class GPTMultiHeadAttention(nn.Module):
-    """GPT-specific wrapper for transformer MultiHeadAttention with causal masking."""
-    
-    def __init__(self, n_embd, n_head, dropout=0.1):
+    def __init__(self, n_embd: int, n_head: int, dropout: float = 0.1):
+        """GPT用のマルチヘッドアテンション（causal mask付き）.
+
+        Args:
+            n_embd (int): 埋め込み次元数
+            n_head (int): ヘッド数
+            dropout (float): ドロップアウト率
+        """
         super().__init__()
         assert n_embd % n_head == 0
         
@@ -24,7 +29,15 @@ class GPTMultiHeadAttention(nn.Module):
         self.attention = MultiHeadAttention(n_head, d_k, d_v, n_embd)
         self.resid_dropout = nn.Dropout(dropout)
         
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """順伝播を実行する.
+
+        Args:
+            x (torch.Tensor): 入力テンソル. shapeは(batch_size, seq_len, n_embd).
+
+        Returns:
+            torch.Tensor: 出力テンソル. shapeは(batch_size, seq_len, n_embd).
+        """
         B, T, C = x.size()  # batch, sequence, embedding
         
         # Create causal mask (prevent attending to future tokens)
@@ -40,9 +53,14 @@ class GPTMultiHeadAttention(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    """Transformer block with self-attention and MLP."""
-    
-    def __init__(self, n_embd, n_head, dropout=0.1):
+    def __init__(self, n_embd: int, n_head: int, dropout: float = 0.1):
+        """Transformerブロック（self-attentionとMLP）.
+
+        Args:
+            n_embd (int): 埋め込み次元数
+            n_head (int): ヘッド数
+            dropout (float): ドロップアウト率
+        """
         super().__init__()
         self.ln_1 = LayerNorm(n_embd)
         self.attn = GPTMultiHeadAttention(n_embd, n_head, dropout)
@@ -54,17 +72,33 @@ class TransformerBlock(nn.Module):
             nn.Dropout(dropout)
         )
         
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """順伝播を実行する.
+
+        Args:
+            x (torch.Tensor): 入力テンソル. shapeは(batch_size, seq_len, n_embd).
+
+        Returns:
+            torch.Tensor: 出力テンソル. shapeは(batch_size, seq_len, n_embd).
+        """
         x = x + self.attn(self.ln_1(x))
         x = x + self.mlp(self.ln_2(x))
         return x
 
 
 class GPT(nn.Module):
-    """GPT Language Model."""
-    
-    def __init__(self, vocab_size, n_embd=768, n_layer=12, n_head=12, 
-                 block_size=1024, dropout=0.1):
+    def __init__(self, vocab_size: int, n_embd: int = 768, n_layer: int = 12, n_head: int = 12, 
+                 block_size: int = 1024, dropout: float = 0.1):
+        """GPT言語モデル.
+
+        Args:
+            vocab_size (int): 語彙サイズ
+            n_embd (int): 埋め込み次元数
+            n_layer (int): レイヤー数
+            n_head (int): ヘッド数
+            block_size (int): 最大シーケンス長
+            dropout (float): ドロップアウト率
+        """
         super().__init__()
         
         self.block_size = block_size
@@ -99,7 +133,18 @@ class GPT(nn.Module):
             torch.nn.init.ones_(module.gamma)
             torch.nn.init.zeros_(module.beta)
     
-    def forward(self, idx, targets=None):
+    def forward(self, idx: torch.Tensor, targets: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """順伝播を実行する.
+
+        Args:
+            idx (torch.Tensor): 入力トークンID. shapeは(batch_size, seq_len).
+            targets (torch.Tensor | None): ターゲットトークンID. shapeは(batch_size, seq_len).
+
+        Returns:
+            tuple[torch.Tensor, torch.Tensor | None]: (logits, loss)
+                - logits: 出力ロジット. shapeは(batch_size, seq_len, vocab_size).
+                - loss: 損失値. targetsが指定された場合のみ計算される.
+        """
         B, T = idx.shape
         
         # Token embedding and positional encoding
@@ -125,15 +170,17 @@ class GPT(nn.Module):
         return logits, loss
     
     @torch.no_grad()
-    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):
-        """
-        Generate text autoregressively.
+    def generate(self, idx: torch.Tensor, max_new_tokens: int, temperature: float = 1.0, top_k: int | None = None) -> torch.Tensor:
+        """テキストを自己回帰的に生成する.
         
         Args:
-            idx: Initial token indices (B, T)
-            max_new_tokens: Number of tokens to generate
-            temperature: Sampling temperature
-            top_k: Top-k sampling parameter
+            idx (torch.Tensor): 初期トークンID. shapeは(batch_size, seq_len).
+            max_new_tokens (int): 生成するトークン数
+            temperature (float): サンプリング温度
+            top_k (int | None): Top-kサンプリングパラメータ
+
+        Returns:
+            torch.Tensor: 生成されたトークンID. shapeは(batch_size, seq_len + max_new_tokens).
         """
         for _ in range(max_new_tokens):
             # Crop to block size
@@ -157,9 +204,12 @@ class GPT(nn.Module):
 
 
 class GPTConfig:
-    """Configuration for GPT model."""
-    
     def __init__(self, **kwargs):
+        """GPTモデルの設定クラス.
+
+        Args:
+            **kwargs: 設定パラメータ
+        """
         # Model configuration
         self.vocab_size = kwargs.get('vocab_size', 50257)
         self.n_embd = kwargs.get('n_embd', 768)
@@ -185,8 +235,12 @@ class GPTConfig:
         self.eval_steps = kwargs.get('eval_steps', 50)
         self.save_interval = kwargs.get('save_interval', 5000)
         
-    def get_model_size(self):
-        """Calculate model parameter count."""
+    def get_model_size(self) -> float:
+        """モデルのパラメータ数を計算する.
+
+        Returns:
+            float: パラメータ数（百万単位）
+        """
         # Token embedding only (PositionalEncoding has no learnable parameters)
         params = self.vocab_size * self.n_embd
         
