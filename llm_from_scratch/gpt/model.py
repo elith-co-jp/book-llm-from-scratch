@@ -5,9 +5,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from llm_from_scratch.transformer.utils import LayerNorm, PositionalEncoding
+from llm_from_scratch.transformer.attention import MultiHeadAttention
 
-class MultiHeadAttention(nn.Module):
-    """Multi-head self-attention mechanism."""
+
+class GPTMultiHeadAttention(nn.Module):
+    """GPT-specific wrapper for transformer MultiHeadAttention with causal masking."""
     
     def __init__(self, n_embd, n_head, dropout=0.1):
         super().__init__()
@@ -15,42 +18,24 @@ class MultiHeadAttention(nn.Module):
         
         self.n_head = n_head
         self.n_embd = n_embd
-        self.dropout = dropout
+        d_k = d_v = n_embd // n_head
         
-        # Linear transformations for Q, K, V
-        self.c_attn = nn.Linear(n_embd, 3 * n_embd)
-        # Output projection
-        self.c_proj = nn.Linear(n_embd, n_embd)
-        
-        self.attn_dropout = nn.Dropout(dropout)
+        # Use transformer MultiHeadAttention
+        self.attention = MultiHeadAttention(n_head, d_k, d_v, n_embd)
         self.resid_dropout = nn.Dropout(dropout)
         
     def forward(self, x):
         B, T, C = x.size()  # batch, sequence, embedding
         
-        # Calculate Q, K, V
-        q, k, v = self.c_attn(x).split(self.n_embd, dim=2)
+        # Create causal mask (prevent attending to future tokens)
+        causal_mask = torch.triu(torch.ones(T, T, device=x.device), diagonal=1).bool()
+        causal_mask = causal_mask.unsqueeze(0).expand(B, -1, -1)  # (B, T, T)
         
-        # Reshape for multi-head attention
-        k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
-        q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
-        v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
+        # Self-attention: query = key = value = x
+        y = self.attention(x, x, x, mask=causal_mask)
         
-        # Attention scores with causal mask
-        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-        
-        # Apply causal mask (prevent attending to future tokens)
-        causal_mask = torch.tril(torch.ones(T, T, device=x.device)).view(1, 1, T, T)
-        att = att.masked_fill(causal_mask == 0, float('-inf'))
-        
-        att = F.softmax(att, dim=-1)
-        att = self.attn_dropout(att)
-        
-        y = att @ v
-        y = y.transpose(1, 2).contiguous().view(B, T, C)
-        
-        # Output projection
-        y = self.resid_dropout(self.c_proj(y))
+        # Apply residual dropout
+        y = self.resid_dropout(y)
         return y
 
 
@@ -59,9 +44,9 @@ class TransformerBlock(nn.Module):
     
     def __init__(self, n_embd, n_head, dropout=0.1):
         super().__init__()
-        self.ln_1 = nn.LayerNorm(n_embd)
-        self.attn = MultiHeadAttention(n_embd, n_head, dropout)
-        self.ln_2 = nn.LayerNorm(n_embd)
+        self.ln_1 = LayerNorm(n_embd)
+        self.attn = GPTMultiHeadAttention(n_embd, n_head, dropout)
+        self.ln_2 = LayerNorm(n_embd)
         self.mlp = nn.Sequential(
             nn.Linear(n_embd, 4 * n_embd),
             nn.GELU(),
@@ -85,9 +70,9 @@ class GPT(nn.Module):
         self.block_size = block_size
         self.n_embd = n_embd
         
-        # Token and position embeddings
+        # Token embedding and positional encoding
         self.token_embedding = nn.Embedding(vocab_size, n_embd)
-        self.position_embedding = nn.Embedding(block_size, n_embd)
+        self.position_encoding = PositionalEncoding(n_embd, block_size)
         self.drop = nn.Dropout(dropout)
         
         # Transformer blocks
@@ -97,7 +82,7 @@ class GPT(nn.Module):
         ])
         
         # Final layer norm and output projection
-        self.ln_f = nn.LayerNorm(n_embd)
+        self.ln_f = LayerNorm(n_embd)
         self.head = nn.Linear(n_embd, vocab_size, bias=False)
         
         # Initialize weights
@@ -110,18 +95,17 @@ class GPT(nn.Module):
                 torch.nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
-        elif isinstance(module, nn.LayerNorm):
-            torch.nn.init.ones_(module.weight)
-            torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, LayerNorm):
+            torch.nn.init.ones_(module.gamma)
+            torch.nn.init.zeros_(module.beta)
     
     def forward(self, idx, targets=None):
         B, T = idx.shape
         
-        # Token and position embeddings
-        pos = torch.arange(0, T, dtype=torch.long, device=idx.device).unsqueeze(0)
+        # Token embedding and positional encoding
         tok_emb = self.token_embedding(idx)
-        pos_emb = self.position_embedding(pos)
-        x = self.drop(tok_emb + pos_emb)
+        x = self.position_encoding(tok_emb)
+        x = self.drop(x)
         
         # Forward through transformer blocks
         x = self.blocks(x)
@@ -203,21 +187,24 @@ class GPTConfig:
         
     def get_model_size(self):
         """Calculate model parameter count."""
-        # Embedding layers
-        params = self.vocab_size * self.n_embd * 2  # token + position
+        # Token embedding only (PositionalEncoding has no learnable parameters)
+        params = self.vocab_size * self.n_embd
         
         # Transformer blocks
         params_per_block = (
-            # Attention
-            self.n_embd * 3 * self.n_embd +  # QKV
-            self.n_embd * self.n_embd +       # output projection
+            # MultiHeadAttention (using transformer implementation)
+            self.n_head * (self.n_embd // self.n_head) * self.n_embd * 3 +  # Q, K, V projections
+            self.n_head * (self.n_embd // self.n_head) * self.n_embd +       # output projection
             # MLP
             self.n_embd * 4 * self.n_embd +   # fc1
             4 * self.n_embd * self.n_embd +   # fc2
-            # LayerNorm
-            self.n_embd * 4                   # 2 LayerNorms
+            # LayerNorm parameters (gamma, beta)
+            self.n_embd * 4                   # 2 LayerNorms × 2 params each
         )
         params += params_per_block * self.n_layer
+        
+        # Final LayerNorm
+        params += self.n_embd * 2  # gamma, beta
         
         # Output layer
         params += self.n_embd * self.vocab_size
