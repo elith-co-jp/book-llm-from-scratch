@@ -148,7 +148,8 @@ def train_soseki_gpt():
         print(generated_text)
 
     # モデルを保存
-    checkpoint_path = "soseki_gpt_checkpoint.pt"
+    os.makedirs("models", exist_ok=True)
+    checkpoint_path = "models/soseki_gpt_checkpoint.pt"
     trainer.save_checkpoint(checkpoint_path)
     print(f"\nモデル保存: {checkpoint_path}")
 
