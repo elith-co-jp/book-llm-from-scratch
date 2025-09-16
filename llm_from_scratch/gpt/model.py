@@ -1,0 +1,266 @@
+"""GPT model architecture implementation."""
+
+import math
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from llm_from_scratch.transformer.utils import LayerNorm, PositionalEncoding
+from llm_from_scratch.transformer.attention import MultiHeadAttention
+
+
+class GPTMultiHeadAttention(nn.Module):
+    def __init__(self, n_embd: int, n_head: int, dropout: float = 0.1):
+        """GPT用のマルチヘッドアテンション（causal mask付き）.
+
+        Args:
+            n_embd (int): 埋め込み次元数
+            n_head (int): ヘッド数
+            dropout (float): ドロップアウト率
+        """
+        super().__init__()
+        assert n_embd % n_head == 0
+        
+        self.n_head = n_head
+        self.n_embd = n_embd
+        d_k = d_v = n_embd // n_head
+        
+        # transformer の MultiHeadAttention を使用
+        self.attention = MultiHeadAttention(n_head, d_k, d_v, n_embd)
+        self.resid_dropout = nn.Dropout(dropout)
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """順伝播を実行する.
+
+        Args:
+            x (torch.Tensor): 入力テンソル. shapeは(batch_size, seq_len, n_embd).
+
+        Returns:
+            torch.Tensor: 出力テンソル. shapeは(batch_size, seq_len, n_embd).
+        """
+        B, T, C = x.size()  # バッチ, シーケンス, 埋め込み
+        
+        # causal mask を作成（未来のトークンへの注意を防ぐ）
+        causal_mask = torch.triu(torch.ones(T, T, device=x.device), diagonal=1).bool()
+        causal_mask = causal_mask.unsqueeze(0).expand(B, -1, -1)  # (バッチ, T, T)
+        
+        # セルフアテンション: query = key = value = x
+        y = self.attention(x, x, x, mask=causal_mask)
+        
+        # 残差ドロップアウトを適用
+        y = self.resid_dropout(y)
+        return y
+
+
+class TransformerBlock(nn.Module):
+    def __init__(self, n_embd: int, n_head: int, dropout: float = 0.1):
+        """Transformerブロック（self-attentionとMLP）.
+
+        Args:
+            n_embd (int): 埋め込み次元数
+            n_head (int): ヘッド数
+            dropout (float): ドロップアウト率
+        """
+        super().__init__()
+        self.ln_1 = LayerNorm(n_embd)
+        self.attn = GPTMultiHeadAttention(n_embd, n_head, dropout)
+        self.ln_2 = LayerNorm(n_embd)
+        self.mlp = nn.Sequential(
+            nn.Linear(n_embd, 4 * n_embd),
+            nn.GELU(),
+            nn.Linear(4 * n_embd, n_embd),
+            nn.Dropout(dropout)
+        )
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """順伝播を実行する.
+
+        Args:
+            x (torch.Tensor): 入力テンソル. shapeは(batch_size, seq_len, n_embd).
+
+        Returns:
+            torch.Tensor: 出力テンソル. shapeは(batch_size, seq_len, n_embd).
+        """
+        x = x + self.attn(self.ln_1(x))
+        x = x + self.mlp(self.ln_2(x))
+        return x
+
+
+class GPT(nn.Module):
+    def __init__(self, vocab_size: int, n_embd: int = 768, n_layer: int = 12, n_head: int = 12, 
+                 block_size: int = 1024, dropout: float = 0.1):
+        """GPT言語モデル.
+
+        Args:
+            vocab_size (int): 語彙サイズ
+            n_embd (int): 埋め込み次元数
+            n_layer (int): レイヤー数
+            n_head (int): ヘッド数
+            block_size (int): 最大シーケンス長
+            dropout (float): ドロップアウト率
+        """
+        super().__init__()
+        
+        self.block_size = block_size
+        self.n_embd = n_embd
+        
+        # トークン埋め込みと位置エンコーディング
+        self.token_embedding = nn.Embedding(vocab_size, n_embd)
+        self.position_encoding = PositionalEncoding(n_embd, block_size)
+        self.drop = nn.Dropout(dropout)
+        
+        # Transformer ブロック
+        self.blocks = nn.Sequential(*[
+            TransformerBlock(n_embd, n_head, dropout) 
+            for _ in range(n_layer)
+        ])
+        
+        # 最終レイヤー正規化と出力射影
+        self.ln_f = LayerNorm(n_embd)
+        self.head = nn.Linear(n_embd, vocab_size, bias=False)
+        
+        # 重みの初期化
+        self.apply(self._init_weights)
+        
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+        elif isinstance(module, LayerNorm):
+            torch.nn.init.ones_(module.gamma)
+            torch.nn.init.zeros_(module.beta)
+    
+    def forward(self, idx: torch.Tensor, targets: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """順伝播を実行する.
+
+        Args:
+            idx (torch.Tensor): 入力トークンID. shapeは(batch_size, seq_len).
+            targets (torch.Tensor | None): ターゲットトークンID. shapeは(batch_size, seq_len).
+
+        Returns:
+            tuple[torch.Tensor, torch.Tensor | None]: (logits, loss)
+                - logits: 出力ロジット. shapeは(batch_size, seq_len, vocab_size).
+                - loss: 損失値. targetsが指定された場合のみ計算される.
+        """
+        B, T = idx.shape
+        
+        # トークン埋め込みと位置エンコーディング
+        tok_emb = self.token_embedding(idx)
+        x = self.position_encoding(tok_emb)
+        x = self.drop(x)
+        
+        # Transformer ブロックを通して順伝搬
+        x = self.blocks(x)
+        x = self.ln_f(x)
+        
+        # 語彙への射影
+        logits = self.head(x)
+        
+        # ターゲットが提供された場合は損失を計算
+        loss = None
+        if targets is not None:
+            B, T, C = logits.shape
+            logits = logits.view(B*T, C)
+            targets = targets.view(B*T)
+            loss = F.cross_entropy(logits, targets)
+        
+        return logits, loss
+    
+    @torch.no_grad()
+    def generate(self, idx: torch.Tensor, max_new_tokens: int, temperature: float = 1.0, top_k: int | None = None) -> torch.Tensor:
+        """テキストを自己回帰的に生成する.
+        
+        Args:
+            idx (torch.Tensor): 初期トークンID. shapeは(batch_size, seq_len).
+            max_new_tokens (int): 生成するトークン数
+            temperature (float): サンプリング温度
+            top_k (int | None): Top-kサンプリングパラメータ
+
+        Returns:
+            torch.Tensor: 生成されたトークンID. shapeは(batch_size, seq_len + max_new_tokens).
+        """
+        for _ in range(max_new_tokens):
+            # ブロックサイズにクロップ
+            idx_cond = idx if idx.size(1) <= self.block_size else idx[:, -self.block_size:]
+            
+            # 予測を取得
+            logits, _ = self(idx_cond)
+            logits = logits[:, -1, :] / temperature
+            
+            # Top-k サンプリングを適用
+            if top_k is not None:
+                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+                logits[logits < v[:, [-1]]] = -float('Inf')
+            
+            # 分布からサンプリング
+            probs = F.softmax(logits, dim=-1)
+            idx_next = torch.multinomial(probs, num_samples=1)
+            idx = torch.cat((idx, idx_next), dim=1)
+        
+        return idx
+
+
+class GPTConfig:
+    def __init__(self, **kwargs):
+        """GPTモデルの設定クラス.
+
+        Args:
+            **kwargs: 設定パラメータ
+        """
+        # モデル設定
+        self.vocab_size = kwargs.get('vocab_size', 50257)
+        self.n_embd = kwargs.get('n_embd', 768)
+        self.n_layer = kwargs.get('n_layer', 12)
+        self.n_head = kwargs.get('n_head', 12)
+        self.block_size = kwargs.get('block_size', 1024)
+        self.dropout = kwargs.get('dropout', 0.1)
+        
+        # 学習設定
+        self.batch_size = kwargs.get('batch_size', 8)
+        self.learning_rate = kwargs.get('learning_rate', 6e-4)
+        self.weight_decay = kwargs.get('weight_decay', 0.1)
+        self.max_steps = kwargs.get('max_steps', 100000)
+        self.warmup_steps = kwargs.get('warmup_steps', 2000)
+        
+        # 最適化設定
+        self.gradient_accumulation_steps = kwargs.get('gradient_accumulation_steps', 4)
+        self.grad_clip = kwargs.get('grad_clip', 1.0)
+        self.use_amp = kwargs.get('use_amp', True)
+        
+        # 評価設定
+        self.eval_interval = kwargs.get('eval_interval', 500)
+        self.eval_steps = kwargs.get('eval_steps', 50)
+        self.save_interval = kwargs.get('save_interval', 5000)
+        
+    def get_model_size(self) -> float:
+        """モデルのパラメータ数を計算する.
+
+        Returns:
+            float: パラメータ数（百万単位）
+        """
+        # Token embedding only (PositionalEncoding has no learnable parameters)
+        params = self.vocab_size * self.n_embd
+        
+        # Transformer blocks
+        params_per_block = (
+            # MultiHeadAttention (using transformer implementation)
+            self.n_head * (self.n_embd // self.n_head) * self.n_embd * 3 +  # Q, K, V projections
+            self.n_head * (self.n_embd // self.n_head) * self.n_embd +       # output projection
+            # MLP
+            self.n_embd * 4 * self.n_embd +   # fc1
+            4 * self.n_embd * self.n_embd +   # fc2
+            # LayerNorm parameters (gamma, beta)
+            self.n_embd * 4                   # 2 LayerNorms × 2 params each
+        )
+        params += params_per_block * self.n_layer
+        
+        # Final LayerNorm
+        params += self.n_embd * 2  # gamma, beta
+        
+        # Output layer
+        params += self.n_embd * self.vocab_size
+        
+        return params / 1e6  # Return in millions
