@@ -1,4 +1,4 @@
-# 実行コマンド例: python section02_tensor_parallel.py
+# 実行コマンド例: python section02_data_parallel.py
 import os
 from pathlib import Path
 from typing import Iterator
