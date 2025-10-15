@@ -25,6 +25,7 @@ dependencies = [
     "datasets>=2.19.0",
     "tiktoken>=0.11.0",
     "accelerate>=1.10.1",
+    "sentencepiece>=0.2.1",
 ]
 
 [build-system]
