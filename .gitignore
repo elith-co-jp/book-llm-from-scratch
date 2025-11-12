@@ -161,3 +161,13 @@ cython_debug/
 
 # Others
 .DS_Store
+
+data/
+
+# Model files
+models/
+*.pt
+*.pth
+*.pkl
+
+tmp/
