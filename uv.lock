@@ -1024,6 +1024,7 @@ dependencies = [
     { name = "ipywidgets" },
     { name = "japanize-matplotlib" },
     { name = "matplotlib" },
+    { name = "neologdn" },
     { name = "notebook" },
     { name = "numpy" },
     { name = "requests" },
@@ -1054,6 +1055,7 @@ requires-dist = [
     { name = "ipywidgets", specifier = ">=8.1.2" },
     { name = "japanize-matplotlib", specifier = ">=1.1.3" },
     { name = "matplotlib", specifier = ">=3.8.2" },
+    { name = "neologdn", specifier = ">=0.5.3" },
     { name = "notebook", specifier = ">=7.0.6" },
     { name = "numpy", specifier = ">=1.26.2" },
     { name = "requests", specifier = ">=2.31.0" },
@@ -1273,6 +1275,16 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/6d/fd/91545e604bc3dad7dca9ed03284086039b294c6b3d75c0d2fa45f9e9caf3/nbformat-5.10.4.tar.gz", hash = "sha256:322168b14f937a5d11362988ecac2a4952d3d8e3a2cbeb2319584631226d5b3a", size = 142749, upload-time = "2024-04-04T11:20:37.371Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a9/82/0340caa499416c78e5d8f5f05947ae4bc3cba53c9f038ab6e9ed964e22f1/nbformat-5.10.4-py3-none-any.whl", hash = "sha256:3b48d6c8fbca4b299bf3982ea7db1af21580e4fec269ad087b9e81588891200b", size = 78454, upload-time = "2024-04-04T11:20:34.895Z" },
+]
+
+[[package]]
+name = "neologdn"
+version = "0.5.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/74/72/85e22c60db1373df01e8f769b7aa9c58c923a94b5321f1a6353a052e279f/neologdn-0.5.4.tar.gz", hash = "sha256:bd4d7c1e9ecf46c3b7692512ecf73d764290c7a2ccd0d462e6c5dbbc990d7c67", size = 96962, upload-time = "2025-03-15T14:33:43.198Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d9/ee/c12047555c40a117132abe96e7a1e71601756f12fa0dc3e15b60e185a615/neologdn-0.5.4-cp312-cp312-win32.whl", hash = "sha256:f754190b02fa8e35ebdaa54e2d4ed9c136dcabb4ea4dd84d75839d2c6bf14d19", size = 48096, upload-time = "2025-03-15T14:33:30.906Z" },
+    { url = "https://files.pythonhosted.org/packages/55/7e/6ffd7ec8b3887a3a40df7596884447906f9b9146e8cb9b9724fc06f7c823/neologdn-0.5.4-cp312-cp312-win_amd64.whl", hash = "sha256:f7652f3983bdb4bdbbfcf404258971d19ff101a6f35521b791821e46a564c42c", size = 52526, upload-time = "2025-03-15T14:33:32.265Z" },
 ]
 
 [[package]]
