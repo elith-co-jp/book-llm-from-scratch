@@ -22,9 +22,9 @@ source .venv/bin/activate  # Linux/Mac
 # .venv\Scripts\activate  # Windows
 ```
 
-詳細な実行例は `examples/train_gpt.py` を参照してください。
+詳細な実行例は `examples/train_gpt_soseki.py` を参照してください。
 
 ```bash
-# サンプルスクリプトの実行
-uv run python examples/train_gpt.py
+# サンプルスクリプトの実行（夏目漱石コーパスで学習）
+uv run python examples/train_gpt_soseki.py
 ```
