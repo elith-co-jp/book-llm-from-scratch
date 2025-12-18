@@ -1,6 +1,9 @@
 {
     "bf16": {
-        "enabled": true
+        "enabled": "auto"
+    },
+    "fp16": {
+        "enabled": "auto"
     },
     "zero_optimization": {
         "stage": 2,
@@ -13,7 +16,7 @@
         "reduce_bucket_size": 2e8,
         "overlap_comm": true
     },
-    "gradient_accumulation_steps": 8,
+    "gradient_accumulation_steps": "auto",
     "gradient_clipping": 1.0,
     "train_batch_size": "auto",
     "train_micro_batch_size_per_gpu": "auto"
