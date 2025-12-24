@@ -28,6 +28,8 @@ dependencies = [
     "sentencepiece>=0.2.1",
     "neologdn>=0.5.3",
     "deepspeed>=0.18.3",
+    "wandb>=0.23.1",
+    "peft>=0.14.0",
 ]
 
 [build-system]

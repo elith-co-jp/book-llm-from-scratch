@@ -1,29 +1,29 @@
 """
-4.3 分散学習による事前学習: rinnaの事前学習済みGPT-2モデルで継続学習
+4.4 学習の効率化（LoRA）: HuggingFace PEFTを用いたLoRAファインチューニング
 
 このスクリプトは、4.1節の前処理済みデータを用いて、
 rinnaの事前学習済み日本語GPT-2モデル (`rinna/japanese-gpt2-medium`) を
-Causal Language Modeling でファインチューニングします。
+LoRA (Low-Rank Adaptation) でファインチューニングします。
 
 実行方法:
 ---------
 単一GPUでの実行:
-    python section03_train_gpt2.py
-
-複数GPUでのデータ並列実行 (4 GPU):
-    torchrun --nproc_per_node=4 section03_train_gpt2.py
+    python section04_train_lora.py
 
 特定のGPUを指定する場合:
-    CUDA_VISIBLE_DEVICES=4,5,6,7 torchrun --nproc_per_node=4 section03_train_gpt2.py
+    CUDA_VISIBLE_DEVICES=0 python section04_train_lora.py
 
-DeepSpeed (ZeRO Stage 2) での実行:
-    CUDA_VISIBLE_DEVICES=4,5,6,7 deepspeed section03_train_gpt2.py --deepspeed ds_config.json
+LoRAパラメータをカスタマイズする場合:
+    python section04_train_lora.py --lora_rank 16 --lora_alpha 32
 
 W&Bでメトリクスを記録する場合:
-    torchrun --nproc_per_node=4 section03_train_gpt2.py --wandb_project gpt2-aozora
+    python section04_train_lora.py --wandb_project gpt2-lora-aozora
 
 必要なデータ:
     - data/aozora_preprocessed (4.1節で作成した前処理済みデータ)
+
+依存ライブラリ:
+    pip install peft
 """
 
 import argparse
@@ -34,6 +34,7 @@ from pathlib import Path
 import torch
 import wandb
 from datasets import load_from_disk
+from peft import LoraConfig, TaskType, get_peft_model
 from transformers import (
     AutoTokenizer,
     GPT2Config,
@@ -64,10 +65,16 @@ EVAL_RATIO = 0.01
 PER_DEVICE_TRAIN_BATCH_SIZE = 16
 PER_DEVICE_EVAL_BATCH_SIZE = 16
 GRADIENT_ACCUMULATION_STEPS = 8
-LEARNING_RATE = 5e-5
+LEARNING_RATE = 1e-4  # LoRAは通常より高い学習率を使用
 WEIGHT_DECAY = 0.1
 WARMUP_STEPS = 100
 NUM_TRAIN_EPOCHS = 3
+
+# LoRAデフォルト設定
+LORA_RANK = 8
+LORA_ALPHA = 32
+LORA_DROPOUT = 0.1
+LORA_TARGET_MODULES = ["c_attn", "c_proj"]
 
 # データ設定
 TEXT_COL = "text"
@@ -133,7 +140,7 @@ class TrainingProgressCallback(TrainerCallback):
 
 
 class BestModelCallback(TrainerCallback):
-    """eval_lossが改善されたらモデルを上書き保存するコールバック"""
+    """eval_lossが改善されたらLoRAアダプターを上書き保存するコールバック"""
 
     def __init__(self, output_dir, tokenizer, local_rank):
         self.output_dir = Path(output_dir)
@@ -147,6 +154,7 @@ class BestModelCallback(TrainerCallback):
             if eval_loss is not None and eval_loss < self.best_eval_loss:
                 logger.info(f"\n★ ベストモデル更新: eval_loss {self.best_eval_loss:.4f} → {eval_loss:.4f}")
                 self.best_eval_loss = eval_loss
+                # LoRAアダプターのみ保存
                 model.save_pretrained(self.output_dir)
                 self.tokenizer.save_pretrained(self.output_dir)
                 logger.info(f"  保存先: {self.output_dir}")
@@ -267,7 +275,7 @@ class GenerationCallback(TrainerCallback):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="GPT-2モデルの分散学習スクリプト"
+        description="GPT-2モデルのLoRAファインチューニングスクリプト"
     )
     parser.add_argument(
         "--data_dir",
@@ -278,14 +286,47 @@ def parse_args():
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="./models/rinna-gpt2-aozora-finetuned",
+        default="./models/rinna-gpt2-aozora-lora",
         help="モデルの保存先ディレクトリ",
     )
+    # LoRA設定
     parser.add_argument(
-        "--deepspeed",
+        "--lora_rank",
+        type=int,
+        default=LORA_RANK,
+        help=f"LoRAのランク（低ランク行列の次元数）（デフォルト: {LORA_RANK}）",
+    )
+    parser.add_argument(
+        "--lora_alpha",
+        type=int,
+        default=LORA_ALPHA,
+        help=f"LoRAのスケーリングファクター（デフォルト: {LORA_ALPHA}）",
+    )
+    parser.add_argument(
+        "--lora_dropout",
+        type=float,
+        default=LORA_DROPOUT,
+        help=f"LoRA層のドロップアウト率（デフォルト: {LORA_DROPOUT}）",
+    )
+    parser.add_argument(
+        "--lora_target_modules",
         type=str,
-        default=None,
-        help="DeepSpeed設定ファイルのパス (例: ds_config.json)",
+        nargs="+",
+        default=LORA_TARGET_MODULES,
+        help=f"LoRAを適用する層（デフォルト: {LORA_TARGET_MODULES}）",
+    )
+    # 学習設定
+    parser.add_argument(
+        "--learning_rate",
+        type=float,
+        default=LEARNING_RATE,
+        help=f"学習率（デフォルト: {LEARNING_RATE}）",
+    )
+    parser.add_argument(
+        "--num_epochs",
+        type=int,
+        default=NUM_TRAIN_EPOCHS,
+        help=f"エポック数（デフォルト: {NUM_TRAIN_EPOCHS}）",
     )
     parser.add_argument(
         "--bf16",
@@ -293,11 +334,11 @@ def parse_args():
         help="BF16混合精度学習を有効化",
     )
     parser.add_argument(
-        "--local_rank",
-        type=int,
-        default=-1,
-        help="分散学習時のローカルランク (torchrunが自動設定)",
+        "--fp16",
+        action="store_true",
+        help="FP16混合精度学習を有効化",
     )
+    # W&B設定
     parser.add_argument(
         "--wandb_project",
         type=str,
@@ -323,13 +364,8 @@ def main():
     args = parse_args()
     from datetime import datetime
 
-    # ローカルランクの取得 (torchrun/deepspeed が設定)
-    # torchrunは環境変数LOCAL_RANKを設定する
-    local_rank = args.local_rank
-    if local_rank == -1:
-        local_rank = int(os.environ.get("LOCAL_RANK", 0))
-
-    # メインプロセスのみログ出力
+    # ローカルランクの取得（単一GPU想定だが、将来の拡張に備える）
+    local_rank = int(os.environ.get("LOCAL_RANK", 0))
     is_main_process = local_rank == 0
 
     # タイムスタンプ付きの出力ディレクトリを作成
@@ -340,12 +376,9 @@ def main():
         logger.info(f"出力ディレクトリ: {output_dir}")
 
     # W&B の初期化（メインプロセスのみ）
-    # use_wandb はメインプロセスでのみ True にする（他のプロセスはログを記録しない）
     use_wandb = args.wandb_project is not None and is_main_process
     if use_wandb:
-        # 学習モードの判定
-        training_mode = "deepspeed" if args.deepspeed else "ddp"
-        run_name = args.wandb_run_name or f"gpt2-aozora-{training_mode}"
+        run_name = args.wandb_run_name or f"gpt2-lora-r{args.lora_rank}-a{args.lora_alpha}"
 
         wandb.init(
             project=args.wandb_project,
@@ -355,13 +388,16 @@ def main():
                 "block_size": BLOCK_SIZE,
                 "per_device_train_batch_size": PER_DEVICE_TRAIN_BATCH_SIZE,
                 "gradient_accumulation_steps": GRADIENT_ACCUMULATION_STEPS,
-                "learning_rate": LEARNING_RATE,
+                "learning_rate": args.learning_rate,
                 "weight_decay": WEIGHT_DECAY,
                 "warmup_steps": WARMUP_STEPS,
-                "num_train_epochs": NUM_TRAIN_EPOCHS,
-                "training_mode": training_mode,
+                "num_train_epochs": args.num_epochs,
+                "lora_rank": args.lora_rank,
+                "lora_alpha": args.lora_alpha,
+                "lora_dropout": args.lora_dropout,
+                "lora_target_modules": args.lora_target_modules,
                 "bf16": args.bf16,
-                "deepspeed_config": args.deepspeed,
+                "fp16": args.fp16,
             },
         )
         logger.info(f"W&B プロジェクト: {args.wandb_project}")
@@ -369,11 +405,11 @@ def main():
 
     if is_main_process:
         logger.info("=" * 60)
-        logger.info("4.3 分散学習による事前学習")
+        logger.info("4.4 学習の効率化（LoRA）")
         logger.info("=" * 60)
 
     # -------------------------------------------------------------------------
-    # データセットの読み込み (4.3.3 データセットの準備)
+    # データセットの読み込み
     # -------------------------------------------------------------------------
     data_dir = Path(args.data_dir)
     if not data_dir.exists():
@@ -397,7 +433,7 @@ def main():
         logger.info(f"評価データ: {len(eval_dataset)} サンプル")
 
     # -------------------------------------------------------------------------
-    # トークナイザの読み込み (4.3.2.1 事前学習済みトークナイザの利用)
+    # トークナイザの読み込み
     # -------------------------------------------------------------------------
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=False)
 
@@ -428,21 +464,45 @@ def main():
     )
 
     # -------------------------------------------------------------------------
-    # モデルの読み込み (4.3.2.2 事前学習済みモデルの利用)
+    # モデルの読み込みとLoRA適用 (4.4.5 HuggingFace PEFTを用いたLoRA学習)
     # -------------------------------------------------------------------------
     config = GPT2Config.from_pretrained(MODEL_NAME)
     model = GPT2LMHeadModel.from_pretrained(MODEL_NAME, config=config)
     model.config.pad_token_id = tokenizer.pad_token_id
 
     if is_main_process:
-        logger.info(f"モデル: {MODEL_NAME}")
+        logger.info(f"\nベースモデル: {MODEL_NAME}")
         logger.info(f"語彙サイズ: {config.vocab_size}")
         logger.info(f"最大シーケンス長: {config.n_positions}")
         logger.info(f"レイヤー数: {config.n_layer}")
         logger.info(f"隠れ層次元: {config.n_embd}")
 
+    # LoRA設定
+    lora_config = LoraConfig(
+        task_type=TaskType.CAUSAL_LM,
+        r=args.lora_rank,
+        lora_alpha=args.lora_alpha,
+        lora_dropout=args.lora_dropout,
+        target_modules=args.lora_target_modules,
+    )
+
+    # LoRAをモデルに適用
+    model = get_peft_model(model, lora_config)
+
+    if is_main_process:
+        logger.info("\n" + "-" * 60)
+        logger.info("LoRA設定")
+        logger.info("-" * 60)
+        logger.info(f"ランク (r): {args.lora_rank}")
+        logger.info(f"スケーリング (alpha): {args.lora_alpha}")
+        logger.info(f"ドロップアウト: {args.lora_dropout}")
+        logger.info(f"適用層: {args.lora_target_modules}")
+        logger.info("-" * 60)
+        model.print_trainable_parameters()
+        logger.info("-" * 60)
+
     # -------------------------------------------------------------------------
-    # 学習設定 (4.3.4 Trainer を用いたデータ並列学習)
+    # 学習設定
     # -------------------------------------------------------------------------
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
@@ -459,31 +519,27 @@ def main():
         logger.info(f"1エポックあたりのステップ数: {steps_per_epoch}")
         logger.info(f"ログ・評価・保存間隔: {logging_steps} steps")
 
-    # TrainingArguments (4.3.4.1 学習設定)
-    # グローバルバッチサイズ = per_device_train_batch_size × GPU数 × gradient_accumulation_steps
+    # TrainingArguments
     training_args = TrainingArguments(
         output_dir=str(output_dir),
         overwrite_output_dir=True,
-        num_train_epochs=NUM_TRAIN_EPOCHS,
+        num_train_epochs=args.num_epochs,
         per_device_train_batch_size=PER_DEVICE_TRAIN_BATCH_SIZE,
         per_device_eval_batch_size=PER_DEVICE_EVAL_BATCH_SIZE,
         gradient_accumulation_steps=GRADIENT_ACCUMULATION_STEPS,
-        learning_rate=LEARNING_RATE,
+        learning_rate=args.learning_rate,
         weight_decay=WEIGHT_DECAY,
         warmup_steps=WARMUP_STEPS,
         logging_steps=logging_steps,
         eval_strategy="steps",
         eval_steps=logging_steps,
-        save_strategy="no",  # チェックポイントは保存しない（最後にbestのみ保存）
+        save_strategy="no",  # チェックポイントは保存しない（BestModelCallbackで保存）
         dataloader_num_workers=4,
-        ddp_find_unused_parameters=False,  # DDP最適化
         report_to=["wandb"] if use_wandb else ["none"],
         load_best_model_at_end=False,
         metric_for_best_model="eval_loss",
-        # DeepSpeed / 混合精度設定 (4.3.5 DeepSpeed による ZeRO の活用)
-        deepspeed=args.deepspeed,
         bf16=args.bf16,
-        # W&B設定
+        fp16=args.fp16,
         run_name=args.wandb_run_name if use_wandb else None,
     )
 
@@ -499,7 +555,7 @@ def main():
     total_steps = (
         len(tokenized_train)
         // (PER_DEVICE_TRAIN_BATCH_SIZE * GRADIENT_ACCUMULATION_STEPS)
-        * NUM_TRAIN_EPOCHS
+        * args.num_epochs
     )
 
     # コールバックの作成
@@ -534,7 +590,7 @@ def main():
         callbacks.append(wandb_metrics_callback)
 
     # -------------------------------------------------------------------------
-    # 学習実行 (4.3.4.2 学習の実行)
+    # 学習実行
     # -------------------------------------------------------------------------
     trainer = Trainer(
         model=model,
@@ -547,16 +603,13 @@ def main():
     )
 
     if is_main_process:
-        if args.deepspeed:
-            logger.info(f"DeepSpeed設定: {args.deepspeed}")
-        else:
-            logger.info("データ並列 (DDP) モードで実行")
+        logger.info("\n学習モードで実行（LoRA）")
 
     trainer.train()
 
-    # モデルはBestModelCallbackで保存済み
+    # LoRAアダプターはBestModelCallbackで保存済み
     if is_main_process:
-        logger.info(f"\nベストモデル保存先: {output_dir}")
+        logger.info(f"\nベストLoRAアダプター保存先: {output_dir}")
         logger.info("=" * 60)
         logger.info("学習完了")
         logger.info("=" * 60)

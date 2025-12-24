@@ -8,7 +8,7 @@
 
 近年の LLM  のような大きなモデルの場合、パラメータ数が膨大であるため、わずかなデータ数であっても学習のために大きな計算リソースが必要となります。そのため、限られた計算リソースで学習する方法が必要になります。具体的には、PEFT とよばれる学習するパラメータ数を少なくするような手法が取られます。以降で説明するLoRA などはその類の手法の中でも近年で特に人気の手法となっています。
 
-この章では、4.4.2 で効率的な学習方法全般について概説し、4.4.3 で LoRA に関する解説を行います。その後、4.4.4 では LoRA のイメージを掴むためにイチから実装します。読者には、難解そうな学習方法がいかにシンプルに実装されているかを体験していただきたく思います。
+この章では、4.4.2 で効率的な学習方法全般について概説し、4.4.3 で LoRA に関する解説を行います。その後、4.4.4 では LoRA のイメージを掴むためにイチから実装します。読者には、難解そうな学習方法がいかにシンプルに実装されているかを体験していただきたく思います。4.4.5 では、実際のプロジェクトで活用できる HuggingFace PEFT ライブラリを用いた実践的な LoRA 学習方法を解説し、4.4.6 では青空文庫コーパスを用いた実際の学習結果を示します。
 
 # 4.4.2 効率的な学習方法
 
@@ -256,3 +256,252 @@ print(f"パラメータ減少率: {(lora_params / original_params) * 100:.2f}%")
 https://lightning.ai/pages/community/tutorial/lora-llm/
 
 https://zenn.dev/zenkigen_tech/articles/2023-05-kurihara
+
+# 4.4.5 HuggingFace PEFTを用いたLoRA学習
+
+4.4.4節ではLoRAの仕組みを理解するためにスクラッチで実装しました。実際のプロジェクトでLoRAを活用する場合は、HuggingFace が提供する PEFT（Parameter-Efficient Fine-Tuning）ライブラリを使用することで、より簡潔かつ安定した実装が可能です。本節では、PEFTライブラリを用いてGPT-2モデルにLoRAを適用し、ファインチューニングを行う方法を解説します。
+
+### PEFTライブラリのインストール
+
+PEFTライブラリは pip でインストールできます。
+
+```bash
+pip install peft
+```
+
+### LoRA設定の定義
+
+PEFTライブラリでは、`LoraConfig` クラスを使用してLoRAのハイパーパラメータを設定します。
+
+```python
+from peft import LoraConfig, TaskType
+
+lora_config = LoraConfig(
+    task_type=TaskType.CAUSAL_LM,  # タスクの種類（因果言語モデル）
+    r=8,                            # LoRAのランク（低ランク行列の次元数）
+    lora_alpha=32,                  # スケーリングファクター
+    lora_dropout=0.1,               # ドロップアウト率
+    target_modules=["c_attn", "c_proj"],  # LoRAを適用する層
+)
+```
+
+主要なパラメータの説明：
+
+| パラメータ | 説明 |
+|-----------|------|
+| `task_type` | タスクの種類。言語モデルの場合は `TaskType.CAUSAL_LM` |
+| `r` | 低ランク行列の次元数。4.4.3節で説明した rank に相当 |
+| `lora_alpha` | LoRAの出力をスケーリングする係数 |
+| `lora_dropout` | LoRA層に適用するドロップアウト率 |
+| `target_modules` | LoRAを適用する層の名前リスト |
+
+`target_modules` には、モデル内の線形層の名前を指定します。GPT-2の場合、`c_attn`（Query/Key/Valueの射影）と `c_proj`（出力射影）が Attention 層の主要な線形層です。
+
+### モデルへのLoRA適用
+
+`get_peft_model` 関数を使用して、既存のモデルにLoRAを適用します。
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import get_peft_model
+
+# ベースモデルの読み込み
+model_name = "rinna/japanese-gpt2-medium"
+model = AutoModelForCausalLM.from_pretrained(model_name)
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+# LoRAの適用
+model = get_peft_model(model, lora_config)
+
+# 学習可能パラメータ数の確認
+model.print_trainable_parameters()
+```
+
+出力例：
+```
+trainable params: 1,179,648 || all params: 337,668,096 || trainable%: 0.35%
+```
+
+ベースモデルの約3.4億パラメータのうち、LoRAによって追加された約118万パラメータ（0.35%）のみが学習対象となります。4.4.4節のスクラッチ実装と比較して、PEFTライブラリではより少ないパラメータ数で効率的な学習が可能です。
+
+### Trainerを用いた学習
+
+HuggingFaceの `Trainer` クラスと組み合わせることで、通常のファインチューニングと同様の手順で学習できます。
+
+```python
+from transformers import Trainer, TrainingArguments, DataCollatorForLanguageModeling
+
+# データコレーターの設定
+data_collator = DataCollatorForLanguageModeling(
+    tokenizer=tokenizer,
+    mlm=False,  # Causal LMなのでMLMは無効
+)
+
+# 学習設定
+training_args = TrainingArguments(
+    output_dir="./models/gpt2-lora",
+    num_train_epochs=3,
+    per_device_train_batch_size=4,
+    gradient_accumulation_steps=4,
+    learning_rate=1e-4,
+    logging_steps=100,
+    save_strategy="epoch",
+    fp16=True,
+)
+
+# Trainerの初期化と学習実行
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=train_dataset,
+    data_collator=data_collator,
+)
+
+trainer.train()
+```
+
+LoRAの学習では、通常のファインチューニングよりも高い学習率（例: 1e-4〜3e-4）を使用することが推奨されます。これは、学習対象のパラメータ数が少ないため、より大きな更新幅でも安定して学習できるためです。
+
+### LoRAアダプターの保存と読み込み
+
+学習済みのLoRAアダプターは、ベースモデルとは別に保存・読み込みが可能です。
+
+```python
+# アダプターの保存
+model.save_pretrained("./models/gpt2-lora-adapter")
+
+# アダプターの読み込み
+from peft import PeftModel
+
+base_model = AutoModelForCausalLM.from_pretrained("rinna/japanese-gpt2-medium")
+model = PeftModel.from_pretrained(base_model, "./models/gpt2-lora-adapter")
+```
+
+保存されるファイルは `adapter_model.safetensors`（約5MB）と `adapter_config.json` のみであり、ベースモデル全体（約1.3GB）を保存する必要がありません。これにより、複数のタスク用アダプターを効率的に管理できます。
+
+### アダプターのマージ
+
+推論時のオーバーヘッドを削減したい場合、LoRAアダプターをベースモデルにマージして単一のモデルにできます。
+
+```python
+# アダプターをベースモデルにマージ
+merged_model = model.merge_and_unload()
+
+# マージ後のモデルを保存
+merged_model.save_pretrained("./models/gpt2-lora-merged")
+```
+
+マージ後のモデルは通常のTransformersモデルとして扱えるため、LoRAを意識せずに推論を実行できます。ただし、マージ後はアダプターの切り替えができなくなる点に注意が必要です。
+
+### スクラッチ実装との比較
+
+4.4.4節のスクラッチ実装とPEFTライブラリの違いを以下にまとめます。
+
+| 項目 | スクラッチ実装 | PEFTライブラリ |
+|------|--------------|---------------|
+| 実装の複雑さ | 高い（各層への適用を自分で実装） | 低い（設定を渡すだけ） |
+| 適用対象の柔軟性 | 高い（任意の層に適用可能） | 中程度（target_modulesで指定） |
+| 保存・読み込み | 自前で実装が必要 | 組み込みサポート |
+| Trainerとの統合 | 追加実装が必要 | シームレスに動作 |
+| デバッグの容易さ | 高い（コードが手元にある） | 低い（内部実装の理解が必要） |
+
+学習の目的でLoRAの仕組みを理解するにはスクラッチ実装が有効ですが、実際のプロジェクトではPEFTライブラリの使用を推奨します。
+
+[9] https://huggingface.co/docs/peft
+
+# 4.4.6 学習結果と考察
+
+本節では、4.4.5 で説明した HuggingFace PEFT を用いて、青空文庫コーパスで rinna/japanese-gpt2-medium を LoRA ファインチューニングした実際の結果を示します。
+
+### 学習設定
+
+| 項目 | 値 |
+|------|-----|
+| ベースモデル | rinna/japanese-gpt2-medium |
+| データセット | 青空文庫（約11万サンプル） |
+| GPU | NVIDIA RTX 6000 Ada Generation × 1 |
+| エポック数 | 3 |
+| バッチサイズ | 4（勾配累積4ステップ） |
+| 学習率 | 1e-4 |
+| LoRA rank (r) | 8 |
+| LoRA alpha | 32 |
+| LoRA dropout | 0.1 |
+| 対象モジュール | c_attn, c_proj |
+
+### 学習結果
+
+LoRA による学習は約5時間で完了しました（3エポック、約2550ステップ）。
+
+| 項目 | 値 |
+|------|-----|
+| 学習時間 | 約5時間（シングルGPU） |
+| 学習可能パラメータ数 | 約118万（全体の0.35%） |
+| アダプターサイズ | 約8.3MB |
+| ベースモデルサイズ | 約1.4GB |
+
+アダプターのみを保存することで、約1.4GBのベースモデル全体を保存する必要がなく、約8.3MBのアダプターファイルのみで済みます。これにより、複数のタスク向けアダプターを効率的に管理できます。
+
+### 4.3節との比較
+
+4.3節のフルファインチューニングと比較して、LoRAの特徴を確認します。
+
+| 項目 | フルファインチューニング（4.3節） | LoRA（本節） |
+|------|----------------------------------|--------------|
+| 学習パラメータ数 | 約3.4億（100%） | 約118万（0.35%） |
+| 保存サイズ | 約1.4GB（モデル全体） | 約8.3MB（アダプターのみ） |
+| 学習時間（シングルGPU） | 約6時間 | 約5時間 |
+| 学習率 | 5e-5 | 1e-4（高め） |
+
+GPT-2 medium 規模のモデルでは、メモリ使用量や学習時間に大きな差は見られません。LoRAの真価が発揮されるのは、7B以上の大規模モデルにおいてです。大規模モデルでは、フルファインチューニングには複数のGPUとDeepSpeed ZeROなどのメモリ最適化が必須となりますが、LoRAを使用すればシングルGPUでも学習が可能になります。
+
+### 生成サンプル
+
+学習の進行に伴う生成品質の変化を確認します。
+
+**学習開始時（step 0）:**
+```
+プロンプト: 吾輩は猫である。名前はまだ無い。
+生成結果: 僕を騙そうとしているのだろうか、それとも偽りかもしれない。
+ただ僕には猫ちゃんに恋をしているのかいないのかが分からないだけだ。
+```
+
+**学習中盤（step 850）:**
+```
+プロンプト: 吾輩は猫である。名前はまだ無い。
+生成結果: 犬も一匹しか居ない。そして、猫といふのは、其れでも一つの
+物種だな」「それなら、私は何が何であれ、此処へ来ることが好ましいぞ」
+```
+
+**学習終了時（step 2550）:**
+```
+プロンプト: 吾輩は猫である。名前はまだ無い。
+生成結果: 」「猫なのに、何で猫なのか?」「猫が猫じゃなければならぬ
+理由は無いわよ。」と彼女は言った、「猫と言う言葉があるけれども、
+猫には人間のような動物らしい性質はないからね。
+```
+
+**その他の生成例（step 2550）:**
+```
+プロンプト: 明治時代の
+生成結果: です。だから、ととは、同じものと思つてゐたのであらうが、
+一向に別物だとは感じない。けれども、今となっては、どうして違うのか
+解らなかつたが、今更ながら考えてみると、それと何ら変らないことが分る。
+
+プロンプト: 先生は言った。「
+生成結果: 」「私はあなたの心をつかむことはできません。」彼はいやが
+うえにも、もうたぶん自分の心を見失っているように思われた。そして、
+そのくせ、ほんとうに自分がいま生きているということを、ふと忘れて
+いるような気もした。
+```
+
+学習が進むにつれて、青空文庫の文体（旧仮名遣いや文語調の表現）を学習していることが確認できます。
+
+### まとめ
+
+本節では、LoRA を用いた効率的なファインチューニングについて学びました。
+
+- **パラメータ効率**: 全パラメータの0.35%のみを学習することで、ストレージ効率が大幅に向上
+- **実用上の利点**: 複数タスク向けアダプターを容易に管理可能
+- **スケーラビリティ**: 7B以上の大規模モデルでは、シングルGPUでの学習を可能にする
+
+LoRA は、計算リソースが限られた環境でも大規模言語モデルをカスタマイズできる強力な手法です。次章では、これらの技術を活用したアラインメント（指示追従能力の獲得）について学びます。
