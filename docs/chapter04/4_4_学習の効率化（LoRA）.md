@@ -140,7 +140,7 @@ alpha (scaling factor):
 - LoRA による重み更新 ΔW = BA の大きさを調整する係数です。
 - alphaが大きいほど、LoRA による重み更新の影響が大きくなります。つまり、事前学習済みの重みからの変化量が大きくなります。
 - alpha が小さすぎると、LoRA の効果が限定的になります。逆に大きすぎると、事前学習済みの知識を破壊してしまうリスクがあります。
-- デフォルトでは alpha=1 に設定されることが多いですが、タスクやモデルに応じて調整することで精度が向上する場合があります。
+- 一般的には alpha = rank、または alpha = 2 × rank に設定されます（例: rank=8 なら alpha=16）。タスクやモデルに応じて調整することで精度が向上する場合があります。
 - rank と alpha の最適値の組み合わせは、タスクやモデルによって異なります。
 
 ### LoRAのGPTモデルへの適用
@@ -198,7 +198,7 @@ class SelfAttentionWithLoRA(nn.Module):
 
 `forward`関数では、入力`x`にLoRAを適用したlinear変換を適用して、query (`q`)、key (`k`)、value (`v`)を計算します。その後、通常のself-attentionと同様に、attention weightsを計算し、valueとの加重和を取ることでattention outputを求めます。最後に、attention outputにLoRAを適用した線形変換(`W_o`)を適用して、最終的な出力を得ます。
 
-この`SelfAttentionWithLoRA`モジュールを、TransformerBlockやGPTモデルの中で通常のself-attentionの代わりに使用することで、LoRAを適用したモデルを構築できます。
+この`SelfAttentionWithLoRA`モジュールを、TransformerブロックやGPTモデルの中で通常のself-attentionの代わりに使用することで、LoRAを適用したモデルを構築できます。
 
 この実装では、LoRALayer と LinearWithLoRA, SelfAttentionWithLoRA のクラス定義を実装しています。
 
@@ -213,25 +213,24 @@ SelfAttentionWithLoRAでは、LoRAを使用した自己注意機構を実装し�
 ```python
 # from transformers import models
 def apply_lora_to_gpt2(model, rank, alpha):
-		for name, module in model.named_modules():
-		    if isinstance(module, nn.Linear):
-		        lora_layer  = LinearWithLoRA(module, rank, alpha)
-		        parent_name = '.'.join(name.split('.')[:-1])
-		        child_name  = name.split('.')[-1] 
-		        parent = model.get_submodule(parent_name) 
-		        setattr(parent, child_name, lora_layer)
-		        
-		    if isinstance(module, models.gpt2.modeling_gpt2.GPT2Attention):
-		        embed_dim = module.embed_dim
-		        num_heads = module.num_heads
+    for name, module in model.named_modules():
+        if isinstance(module, nn.Linear):
+            lora_layer = LinearWithLoRA(module, rank, alpha)
+            parent_name = '.'.join(name.split('.')[:-1])
+            child_name = name.split('.')[-1]
+            parent = model.get_submodule(parent_name)
+            setattr(parent, child_name, lora_layer)
+
+        if isinstance(module, models.gpt2.modeling_gpt2.GPT2Attention):
+            embed_dim = module.embed_dim
+            num_heads = module.num_heads
             parent_name = '.'.join(name.split('.')[:-1])
             child_name = name.split('.')[-1]
             parent = model.get_submodule(parent_name)
             setattr(parent, child_name, SelfAttentionWithLoRA(embed_dim, num_heads, rank, alpha))
-            print(embed_dim, num_heads, parent_name, child_name)
 ```
 
-手順としては、モデルのモジュール名一覧から、線形層のインスタンスに該当する部分に対して、先ほど定義した LinearWithLoRAクラスを新たなアトリビューションとして置き換えるようにして適用します。これは SelfAttentionWithLoRA クラスを GPT2 の自己注意機構モジュールである GPT2Attention と置き換える際も同様に行います。
+手順としては、モデルのモジュール名一覧から、線形層のインスタンスに該当する部分に対して、先ほど定義した LinearWithLoRA クラスに置き換えるようにして適用します。GPT2 の自己注意機構モジュールである GPT2Attention を SelfAttentionWithLoRA クラスに置き換える際も同様に行います。
 
 以下のプログラムでは実際に GPT2 の学習可能パラメータ数が LoRA の適用前後でどの程度減少したのかを確かめています。
 
