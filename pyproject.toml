@@ -6,7 +6,7 @@ authors = [
     {name = "aRySt0cat", email = "ryuta.academic@gmail.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.9,<3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "torch>=2.1.1",
     "numpy>=1.26.2",
@@ -18,6 +18,15 @@ dependencies = [
     "tensorboard>=2.12.0",
     "notebook>=7.0.6",
     "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+    "torchtext>=0.16.0",
+    "tokenizers>=0.15.2",
+    "transformers>=4.45.0",
+    "datasets>=2.19.0",
+    "tiktoken>=0.11.0",
+    "accelerate>=1.10.1",
+    "sentencepiece>=0.2.1",
+    "neologdn>=0.5.3",
 ]
 
 [build-system]
