@@ -164,6 +164,9 @@ cython_debug/
 
 data/
 
+# Notebook outputs
+notebooks/chapter05/output/
+
 # Model files
 models/
 *.pt
