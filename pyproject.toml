@@ -21,12 +21,13 @@ dependencies = [
     "beautifulsoup4>=4.12.0",
     "torchtext>=0.16.0",
     "tokenizers>=0.15.2",
-    "transformers>=4.45.0",
-    "datasets>=2.19.0",
+    "transformers==4.40.0",
+    "datasets>=4.1.0",
     "tiktoken>=0.11.0",
     "accelerate>=1.10.1",
     "sentencepiece>=0.2.1",
     "neologdn>=0.5.3",
+    "trl==0.9.6",
 ]
 
 [build-system]
