@@ -119,10 +119,8 @@ def train_soseki_gpt():
 
     # プロンプトで開始
     prompts = [
-        "吾輩は猫である",
-        "明治",
-        "東京",
-        "先生"
+        "吾輩は",
+        "夏の"
     ]
 
     for prompt in prompts:
