@@ -1,6 +1,27 @@
 # LLM from Scratch
 
-大規模言語モデル（LLM）の基礎から実装までを学ぶためのリポジトリです。TransformerアーキテクチャからGPTモデルの実装、分散学習、アラインメントまでを段階的に理解できます。
+
+本リポジトリは書籍『[**作ってわかる大規模言語モデルの仕組み**](https://www.amazon.co.jp/dp/4296205250/)』（日経BP、2026年）の公式サポートリポジトリです。
+
+大規模言語モデル（LLM）の基礎から実装までを、Transformerアーキテクチャ → GPTモデル → 事前学習 → アラインメントと段階的に学ぶことができます。
+
+> 本書の正誤訂正情報は[こちら](refs/errors.md)をご覧ください。
+
+---
+
+## 書籍の章構成
+
+| 章 | タイトル | ノートブック |
+|:--:|:--------|:------------|
+| 第1章 | 大規模言語モデルの歴史と本書で得られること | — |
+| 第2章 | Transformerモデルの作成 | [`notebooks/chapter02/`](notebooks/chapter02/) |
+| 第3章 | GPTモデルの作成 | [`notebooks/chapter03/`](notebooks/chapter03/) |
+| 第4章 | 大規模言語モデルの学習 | [`notebooks/chapter04/`](notebooks/chapter04/) |
+| 第5章 | アラインメント | [`notebooks/chapter05/`](notebooks/chapter05/) |
+| 第6章 | 推論モデル | — |
+| 付録 | NumPy、PyTorch入門 | — |
+
+
 
 ## セットアップ
 
