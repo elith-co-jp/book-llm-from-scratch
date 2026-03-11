@@ -15,31 +15,48 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
 ```
 
+## ノートブック
+
+各章のノートブックはGoogle Colabで直接開いて実行できます。
+
+### 2章: Transformerの実装
+
+| セクション | 内容 | Colab |
+|:--|:--|:--:|
+| 2.2 | アテンション機構 | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/elith-co-jp/book-llm-from-scratch/blob/main/notebooks/chapter02/section2.ipynb) |
+| 2.3 | アテンション以外の部品 | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/elith-co-jp/book-llm-from-scratch/blob/main/notebooks/chapter02/section3.ipynb) |
+| 2.4 | Transformerを作る | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/elith-co-jp/book-llm-from-scratch/blob/main/notebooks/chapter02/section4.ipynb) |
+| 2.5 | Transformerの学習と推論 | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/elith-co-jp/book-llm-from-scratch/blob/main/notebooks/chapter02/section5.ipynb) |
+
+### 3章: GPTモデルの学習
+
+| セクション | 内容 | Colab |
+|:--|:--|:--:|
+| 3.3 | 夏目漱石テキストでGPT訓練 | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/elith-co-jp/book-llm-from-scratch/blob/main/notebooks/chapter03/train_gpt_soseki.ipynb) |
+
+### 4章: 大規模化と分散学習
+
+| セクション | 内容 | Colab |
+|:--|:--|:--:|
+| 4.1 | データセット前処理 | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/elith-co-jp/book-llm-from-scratch/blob/main/notebooks/chapter04/section01_dataset_preprocessing.ipynb) |
+| 4.2 | データ並列 / テンソル並列 | `.py`（torchrun で実行） |
+| 4.3 | GPT-2 事前学習 | `.py`（torchrun / deepspeed で実行） |
+| 4.4 | LoRA ファインチューニング | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/elith-co-jp/book-llm-from-scratch/blob/main/notebooks/chapter04/section04_lora.ipynb) |
+
+### 5章: アラインメント
+
+| セクション | 内容 | Colab |
+|:--|:--|:--:|
+| 5.2 | インストラクションチューニング | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/elith-co-jp/book-llm-from-scratch/blob/main/notebooks/chapter05/section2.ipynb) |
+| 5.3 | DPO | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/elith-co-jp/book-llm-from-scratch/blob/main/notebooks/chapter05/section3.ipynb) |
+
 ## リポジトリ構成
 
 ```
-notebooks/
-├── chapter02/          # 2章: Transformerの実装
-│   ├── section2.ipynb  #   アテンション機構
-│   ├── section3.ipynb  #   アテンション以外の部品
-│   ├── section4.ipynb  #   Transformerを作る
-│   └── section5.ipynb  #   Transformerの学習と推論
-├── chapter03/          # 3章: GPTモデルの学習
-│   └── train_gpt_soseki.ipynb  # 夏目漱石テキストでGPT訓練（Colab対応）
-├── chapter04/          # 4章: 大規模化と分散学習
-│   ├── section01_dataset_preprocessing.ipynb  # データセット前処理
-│   ├── section02_data_parallel.py             # データ並列（torchrun）
-│   ├── section02_tensor_parallel.py           # テンソル並列（torchrun）
-│   ├── section03_train_gpt2.py                # GPT-2事前学習（torchrun/deepspeed）
-│   └── section04_lora.ipynb                   # LoRAファインチューニング
-└── chapter05/          # 5章: アラインメント
-    ├── section2.ipynb  #   インストラクションチューニング
-    └── section3.ipynb  #   DPO
-
+notebooks/              # 各章のノートブック・スクリプト
 llm_from_scratch/       # Pythonパッケージ（2章ノートブックから参照）
 ├── transformer/        #   Transformerモジュール
 └── gpt/                #   GPTモジュール
-
 refs/
 └── errors.md           # 正誤表
 ```
