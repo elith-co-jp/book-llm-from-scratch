@@ -1,11 +1,9 @@
 """GPT model architecture implementation."""
 
-import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from llm_from_scratch.transformer.utils import LayerNorm, PositionalEncoding
 from llm_from_scratch.transformer.attention import MultiHeadAttention
 
 
@@ -62,9 +60,9 @@ class TransformerBlock(nn.Module):
             dropout (float): ドロップアウト率
         """
         super().__init__()
-        self.ln_1 = LayerNorm(n_embd)
+        self.ln_1 = nn.LayerNorm(n_embd)
         self.attn = GPTMultiHeadAttention(n_embd, n_head, dropout)
-        self.ln_2 = LayerNorm(n_embd)
+        self.ln_2 = nn.LayerNorm(n_embd)
         self.mlp = nn.Sequential(
             nn.Linear(n_embd, 4 * n_embd),
             nn.GELU(),
@@ -104,9 +102,9 @@ class GPT(nn.Module):
         self.block_size = block_size
         self.n_embd = n_embd
         
-        # トークン埋め込みと位置エンコーディング
+        # トークンと位置の埋め込み
         self.token_embedding = nn.Embedding(vocab_size, n_embd)
-        self.position_encoding = PositionalEncoding(n_embd, block_size)
+        self.position_embedding = nn.Embedding(block_size, n_embd)
         self.drop = nn.Dropout(dropout)
         
         # Transformer ブロック
@@ -115,8 +113,8 @@ class GPT(nn.Module):
             for _ in range(n_layer)
         ])
         
-        # 最終レイヤー正規化と出力射影
-        self.ln_f = LayerNorm(n_embd)
+        # 最終層の正規化と出力層
+        self.ln_f = nn.LayerNorm(n_embd)
         self.head = nn.Linear(n_embd, vocab_size, bias=False)
         
         # 重みの初期化
@@ -129,9 +127,9 @@ class GPT(nn.Module):
                 torch.nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
-        elif isinstance(module, LayerNorm):
-            torch.nn.init.ones_(module.gamma)
-            torch.nn.init.zeros_(module.beta)
+        elif isinstance(module, nn.LayerNorm):
+            torch.nn.init.ones_(module.weight)
+            torch.nn.init.zeros_(module.bias)
     
     def forward(self, idx: torch.Tensor, targets: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor | None]:
         """順伝播を実行する.
@@ -146,11 +144,12 @@ class GPT(nn.Module):
                 - loss: 損失値. targetsが指定された場合のみ計算される.
         """
         B, T = idx.shape
-        
-        # トークン埋め込みと位置エンコーディング
+
+        # トークンと位置の埋め込みを加算
+        pos = torch.arange(0, T, dtype=torch.long, device=idx.device).unsqueeze(0)
         tok_emb = self.token_embedding(idx)
-        x = self.position_encoding(tok_emb)
-        x = self.drop(x)
+        pos_emb = self.position_embedding(pos)
+        x = self.drop(tok_emb + pos_emb)
         
         # Transformer ブロックを通して順伝搬
         x = self.blocks(x)
@@ -241,8 +240,9 @@ class GPTConfig:
         Returns:
             float: パラメータ数（百万単位）
         """
-        # Token embedding only (PositionalEncoding has no learnable parameters)
+        # Token embedding + Position embedding (both learnable)
         params = self.vocab_size * self.n_embd
+        params += self.block_size * self.n_embd
         
         # Transformer blocks
         params_per_block = (

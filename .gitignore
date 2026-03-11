@@ -173,4 +173,6 @@ models/
 *.pth
 *.pkl
 
-tmp/
+.tmp/
+
+wandb/
