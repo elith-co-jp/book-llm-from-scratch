@@ -1,11 +1,23 @@
 # LLM from Scratch
 
+<table>
+<tr>
+<td width="200">
+<a href="https://www.amazon.co.jp/dp/4296205250/">
+<img src="refs/cover.jpg" alt="作ってわかる大規模言語モデルの仕組み" width="180">
+</a>
+</td>
+<td>
 
 本リポジトリは書籍『[**作ってわかる大規模言語モデルの仕組み**](https://www.amazon.co.jp/dp/4296205250/)』（日経BP、2026年）の公式サポートリポジトリです。
 
 大規模言語モデル（LLM）の基礎から実装までを、Transformerアーキテクチャ → GPTモデル → 事前学習 → アラインメントと段階的に学ぶことができます。
 
-> 本書の正誤訂正情報は[こちら](refs/errors.md)をご覧ください。
+本書の正誤訂正情報は[こちら](refs/errors.md)をご覧ください。
+
+</td>
+</tr>
+</table>
 
 ---
 
@@ -20,8 +32,6 @@
 | 第5章 | アラインメント | [`notebooks/chapter05/`](notebooks/chapter05/) |
 | 第6章 | 推論モデル | — |
 | 付録 | NumPy、PyTorch入門 | — |
-
-
 
 ## セットアップ
 
